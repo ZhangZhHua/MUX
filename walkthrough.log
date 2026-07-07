@@ -1,0 +1,25 @@
+=== 2026-07-07 ===
+
+[z-index 变量体系]
+- client/src/assets/main.css: 新增 :root CSS 变量体系
+  --z-above: 10         (卡片内小组件: kick-btn, tooltip)
+  --z-sticky: 100       (全局固定导航栏: Header, Sidebar)
+  --z-overlay: 1000     (弹窗遮罩层)
+  --z-overlay-close: 1001 (弹窗关闭按钮)
+  --z-modal: 1100       (确认弹窗 ConfirmDialog)
+  --z-toast: 1200       (Toast 通知)
+
+[替换硬编码 z-index → CSS 变量]
+- Header.vue:  z-index: 100 → var(--z-sticky)
+- Sidebar.vue: z-index: 90 → var(--z-sticky)
+- Dashboard.vue: z-index: 99999 → var(--z-overlay)
+- TeamMembers.vue: .btn-kick-member z-index: 10 → var(--z-above)
+- ImageLightbox.vue: 99999 → var(--z-overlay), 100010/100005 → var(--z-overlay-close)
+- ConfirmDialog.vue: z-index: 9999999 → var(--z-modal)
+- ToastContainer.vue: z-index: 2147483647 → var(--z-toast)
+
+[全局确认弹窗 ConfirmDialog]
+- 新增: client/src/composables/useConfirmDialog.js (reactive 状态 + 事件总线)
+- 新增: client/src/components/common/ConfirmDialog.vue (Teleport 模态组件)
+- 替换 Dashboard.vue: 原生 confirm() → showConfirm() 异步模态
+- 替换 TeamMembers.vue: 原生 confirm() ×2 → showConfirm() 异步模态

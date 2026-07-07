@@ -1,0 +1,45 @@
+:root {
+  /* 现代科研风格色盘 */
+  --bg-primary: #f8fafc;       /* 整体底色，淡淡的冷灰 */
+  --bg-surface: #ffffff;       /* 卡片、白底色 */
+  --text-main: #0f172a;        /* 主文字，深 slate 蓝 */
+  --text-muted: #64748b;       /* 次要文字 */
+  --border-color: #e2e8f0;     /* 极细边框线 */
+  
+  --primary-color: #2563eb;    /* 核心科技蓝 */
+  --primary-hover: #1d4ed8;
+  --success-color: #10b981;    /* 运行中/成功：翡翠绿 */
+
+  /* 现代阴影与圆角 */
+  --radius-md: 8px;
+  --radius-sm: 6px;
+  --shadow-sm: 0 1px 3px 0 rgba(0, 0, 0, 0.05), 0 1px 2px -1px rgba(0, 0, 0, 0.05);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -2px rgba(0, 0, 0, 0.05);
+
+  /* 层叠上下文层级系统 —— 按"谁应该浮在谁上面"严格分层 */
+  --z-above: 10;        /* 卡片内小组件（kick-btn、tooltip） */
+  --z-sticky: 100;      /* 全局固定导航栏 (Header/Sidebar) */
+  --z-overlay: 1000;    /* 弹窗遮罩层 (modal-backdrop, image-lightbox) */
+  --z-overlay-close: 1001; /* 弹窗内部关闭按钮、工具提示 */
+  --z-modal: 1100;      /* 确认弹窗 (ConfirmDialog) —— 恒在普通弹窗之上 */
+  --z-toast: 1200;      /* Toast 通知 (最顶层) */
+}
+
+html, body {
+  height: 100%;
+  overflow: hidden;
+  margin: 0;
+  background-color: var(--bg-primary);
+  color: var(--text-main);
+  font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+#app {
+  height: 100%;
+  max-width: 100% !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  text-align: left !important;
+  overflow: hidden;
+}

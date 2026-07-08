@@ -1,8 +1,7 @@
 <template>
   <header class="global-header">
     <div class="header-left">
-      <span class="logo-icon">⚛️</span>
-      <h1 class="logo-text" @click="router.push('/')">Physics Lab Logs</h1>
+      <MuxLogo />
     </div>
 
     <div class="header-center">
@@ -147,6 +146,7 @@
 import { ref, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import api from '../../services/api';
+import MuxLogo from '../common/MuxLogo.vue';
 import { useToast } from '../../composables/useToast';
 
 const props = defineProps({

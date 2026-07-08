@@ -2,8 +2,13 @@ from sqlalchemy import create_engine
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 
-# 数据库连接字符串，与我们在 docker-compose 中配置的完全一致
-SQLALCHEMY_DATABASE_URL = "postgresql://lab_user:lab_password_2026@localhost:5432/lab_logs"
+import os
+
+# 数据库连接字符串，优先从环境变量读取（容器化部署需要），开发环境回退到 localhost
+SQLALCHEMY_DATABASE_URL = os.getenv(
+    "DATABASE_URL", 
+    "postgresql://lab_user:lab_password_2026@localhost:5432/lab_logs"
+)
 
 # 创建数据库引擎
 engine = create_engine(SQLALCHEMY_DATABASE_URL)

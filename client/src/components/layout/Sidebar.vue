@@ -38,6 +38,11 @@
         <span class="nav-icon">👥</span>
         <span class="nav-text">Team Members</span>
       </div>
+
+      <div class="nav-item" :class="{ active: route.path === '/events' }" @click="router.push('/events')">
+        <span class="nav-icon">📅</span>
+        <span class="nav-text">Lab Events</span>
+      </div>
     </nav>
 
     <!-- Telemetry Clocks (Now above Settings at the bottom) -->

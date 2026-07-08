@@ -24,7 +24,7 @@
     </div>
 
     <Teleport to="body">
-      <div class="modal-backdrop" v-if="showProfileModal" @click.self="closeProfileModal">
+      <div class="modal-backdrop" v-if="showProfileModal" @mousedown.self="mouseDownTarget = $event.target" @mouseup.self="mouseDownTarget === $event.currentTarget && closeProfileModal()">
         <div class="modal-box profile-center-modal">
           
           <div class="profile-modal-layout">
@@ -160,6 +160,8 @@ const toast = useToast();
 
 const showProfileModal = ref(false);
 const activeTab = ref('profile'); // profile | security
+
+let mouseDownTarget = null;
 
 const userEmail = ref('');
 const currentFullName = ref('');

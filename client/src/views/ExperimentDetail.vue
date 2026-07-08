@@ -58,14 +58,14 @@
               <div class="overview-body-drawer" v-if="isOverviewExpanded">
                 <!-- 💡 核心修复：在此处补齐 v-if="isMarkdownMode"，使之与下方的 v-else 形成完美的条件编译对齐 -->
                 <div class="markdown-view-wrapper" v-if="isMarkdownMode">
-                  <div v-if="experiment.format_type === 'markdown'" class="markdown-body" v-html="compileMarkdown(experiment.description)"></div>
-                  <pre v-else class="plain-text-body">{{ experiment.description || 'No document content recorded.' }}</pre>
+                  <div v-if="editFormatType === 'markdown'" class="markdown-body" v-html="compileMarkdown(editDescription)"></div>
+                  <pre v-else class="plain-text-body">{{ editDescription || 'No document content recorded.' }}</pre>
                 </div>
                 
                 <div class="editor-body" v-else>
                   <textarea class="static-textarea" rows="10" v-model="editDescription"></textarea>
                   <div class="editor-actions">
-                    <button class="btn-cancel-inline" @click="isMarkdownMode = true">Cancel</button>
+                    <button class="btn-cancel-inline" @click="handleCancelEdit">Cancel</button>
                     <button class="btn-save-inline" @click="handleSaveDescription">Save Document</button>
                   </div>
                 </div>
@@ -388,7 +388,7 @@
 
     <!-- 弹窗 A：完全体详情与修改一体化弹窗 -->
     <Teleport to="body">
-      <div class="modal-backdrop" v-if="showLogDetailModal" @click.self="closeLogModal">
+      <div class="modal-backdrop" v-if="showLogDetailModal" @mousedown.self="mouseDownTarget = $event.target" @mouseup.self="mouseDownTarget === $event.currentTarget && closeLogModal()">
         <div class="modal-box log-detail-modal">
           <div class="modal-header">
             <h3>Shift Log Node</h3>
@@ -477,7 +477,7 @@
 
     <!-- 弹窗 B：新建日志弹窗 (支持多附件挂载) -->
     <Teleport to="body">
-      <div class="modal-backdrop" v-if="showAddLogModal" @click.self="closeAddLogModal">
+      <div class="modal-backdrop" v-if="showAddLogModal" @mousedown.self="mouseDownTarget = $event.target" @mouseup.self="mouseDownTarget === $event.currentTarget && closeAddLogModal()">
         <div class="modal-box log-detail-modal">
           <div class="modal-header">
             <div>
@@ -529,9 +529,9 @@
       </div>
     </Teleport>
 
-    <!-- 弹窗 C：人员勾选绑定弹窗 -->
+    <!-- 弹窗 C：科研团队成员连带关系分配看板 -->
     <Teleport to="body">
-      <div class="modal-backdrop" v-if="showPersonnelModal" @click.self="closePersonnelModal">
+      <div class="modal-backdrop" v-if="showPersonnelModal" @mousedown.self="mouseDownTarget = $event.target" @mouseup.self="mouseDownTarget === $event.currentTarget && closePersonnelModal()">
         <div class="modal-box log-detail-modal">
           <div class="modal-header">
             <h3>Manage Experiment Personnel</h3>
@@ -552,9 +552,9 @@
       </div>
     </Teleport>
 
-    <!-- 弹窗 D：修改实验元数据信息弹窗 -->
+    <!-- 弹窗 D：实验元信息全量配置与属性校准面板 -->
     <Teleport to="body">
-      <div class="modal-backdrop" v-if="showEditMetaModal" @click.self="closeEditMetaModal">
+      <div class="modal-backdrop" v-if="showEditMetaModal" @mousedown.self="mouseDownTarget = $event.target" @mouseup.self="mouseDownTarget === $event.currentTarget && closeEditMetaModal()">
         <div class="modal-box log-detail-modal">
           <div class="modal-header">
             <h3>Modify Experiment Meta Details</h3>
@@ -591,9 +591,9 @@
       </div>
     </Teleport>
 
-    <!-- 弹窗 E：管理实验步骤弹窗 -->
+    <!-- 弹窗 E：实验操作步骤（Checklist）全量管理看板 -->
     <Teleport to="body">
-      <div class="modal-backdrop" v-if="showManageStepsModal" @click.self="closeManageStepsModal">
+      <div class="modal-backdrop" v-if="showManageStepsModal" @mousedown.self="mouseDownTarget = $event.target" @mouseup.self="mouseDownTarget === $event.currentTarget && closeManageStepsModal()">
         <div class="modal-box log-detail-modal" style="max-width: 460px;">
           <div class="modal-header">
             <h3>Manage Experiment Steps</h3>
@@ -647,7 +647,7 @@
 
     <!-- Teleport C: PDF Preview Overlay Modal -->
     <Teleport to="body">
-      <div class="modal-backdrop pdf-preview-backdrop" v-if="isPreviewOpen" @click.self="closePdfPreview">
+      <div class="modal-backdrop pdf-preview-backdrop" v-if="isPreviewOpen" @mousedown.self="mouseDownTarget = $event.target" @mouseup.self="mouseDownTarget === $event.currentTarget && closePdfPreview()">
         <div class="pdf-preview-box">
           <div class="pdf-preview-header">
             <h3>📄 Document Preview: {{ truncateFileName(previewFilename, 45) }}</h3>
@@ -730,6 +730,8 @@ const showLogDetailModal = ref(false);
 const showAddLogModal = ref(false);
 const showPersonnelModal = ref(false);
 const addLogSelectedDate = ref(null);
+
+let mouseDownTarget = null;
 
 // Checklist steps refs
 const stepsList = ref([]);
@@ -988,13 +990,13 @@ const compileMarkdown = (text) => {
 };
 
 const toggleEditMode = () => {
-  if (isMarkdownMode.value) {
-    editDescription.value = experiment.value.description || '';
-    editFormatType.value = experiment.value.format_type;
-    isMarkdownMode.value = false;
-  } else {
-    isMarkdownMode.value = true;
-  }
+  isMarkdownMode.value = !isMarkdownMode.value;
+};
+
+const handleCancelEdit = () => {
+  editDescription.value = experiment.value.description || '';
+  editFormatType.value = experiment.value.format_type;
+  isMarkdownMode.value = true;
 };
 
 const handleSaveDescription = async () => {

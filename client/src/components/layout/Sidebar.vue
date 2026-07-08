@@ -66,7 +66,7 @@
     </nav>
 
     <Teleport to="body">
-      <div class="modal-backdrop" v-if="showCreateGroupModal" @click.self="closeGroupModal">
+      <div class="modal-backdrop" v-if="showCreateGroupModal" @mousedown.self="mouseDownTarget = $event.target" @mouseup.self="mouseDownTarget === $event.currentTarget && closeGroupModal()">
         <div class="modal-box spawn-group-modal">
           <div class="modal-header">
             <h3>Spawn New Research Group</h3>
@@ -113,6 +113,8 @@ const userRole = ref('member');
 const showCreateGroupModal = ref(false);
 const newGroupName = ref('');
 const newGroupDesc = ref('');
+
+let mouseDownTarget = null;
 
 const beijingTime = ref('');
 const genevaTime = ref('');

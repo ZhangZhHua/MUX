@@ -29,7 +29,10 @@
         
         <p class="switch-tip">
           Don't have an account? <router-link to="/register" class="link">Register here</router-link>
+          <!-- 换行 --> 
+          <br> If forget password, please contact the administrator.
         </p>
+       
       </form>
     </div>
   </div>

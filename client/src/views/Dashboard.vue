@@ -206,7 +206,7 @@
     </main>
 
     <Teleport to="body">
-      <div class="modal-backdrop" v-if="showCreateTagModal" @click.self="closeTagModal">
+      <div class="modal-backdrop" v-if="showCreateTagModal" @mousedown.self="mouseDownTarget = $event.target" @mouseup.self="mouseDownTarget === $event.currentTarget && closeTagModal()">
         <div class="modal-box max-w-sm">
           <div class="modal-header">
             <h3>Add Global System Tag</h3>
@@ -227,7 +227,7 @@
     </Teleport>
 
     <Teleport to="body">
-      <div class="modal-backdrop" v-if="showCreateExperimentModal" @click.self="closeCreateExperimentModal">
+      <div class="modal-backdrop" v-if="showCreateExperimentModal" @mousedown.self="mouseDownTarget = $event.target" @mouseup.self="mouseDownTarget === $event.currentTarget && closeCreateExperimentModal()">
         <div class="modal-box max-w-md" style="background: #ffffff; padding: 26px; border-radius: 12px;">
           <div class="modal-header">
             <h3>Create New Experiment Project</h3>
@@ -272,6 +272,8 @@ import Sidebar from '../components/layout/Sidebar.vue';
 const router = useRouter();
 const toast = useToast();
 const { confirm } = useConfirmDialog();
+
+let mouseDownTarget = null;
 
 const userName = ref('');
 const userRole = ref('');

@@ -288,7 +288,7 @@
 
     <!-- Create / Edit Event Modal -->
     <Teleport to="body">
-      <div class="modal-backdrop" v-if="showEventModal" @click.self="closeEventModal">
+      <div class="modal-backdrop" v-if="showEventModal" @mousedown.self="mouseDownTarget = $event.target" @mouseup.self="mouseDownTarget === $event.currentTarget && closeEventModal()">
         <div class="modal-box event-modal">
           <div class="modal-header">
             <h3>{{ isEditMode ? 'Modify Lab Event Node' : 'Spawn Lab Event Node' }}</h3>
@@ -489,7 +489,7 @@
 
     <!-- Recurrence Saving Prompt Modal -->
     <Teleport to="body">
-      <div class="modal-backdrop" v-if="showRecurrencePrompt" @click.self="closeRecurrencePrompt">
+      <div class="modal-backdrop" v-if="showRecurrencePrompt" @mousedown.self="mouseDownTarget = $event.target" @mouseup.self="mouseDownTarget === $event.currentTarget && closeRecurrencePrompt()">
         <div class="modal-box confirmation-modal">
           <div class="modal-header">
             <h3>Modify Recurring Event</h3>
@@ -509,7 +509,7 @@
 
     <!-- Recurrence Deleting Prompt Modal -->
     <Teleport to="body">
-      <div class="modal-backdrop" v-if="showDeleteRecurrencePrompt" @click.self="closeDeleteRecurrencePrompt">
+      <div class="modal-backdrop" v-if="showDeleteRecurrencePrompt" @mousedown.self="mouseDownTarget = $event.target" @mouseup.self="mouseDownTarget === $event.currentTarget && closeDeleteRecurrencePrompt()">
         <div class="modal-box confirmation-modal">
           <div class="modal-header">
             <h3>Delete Recurring Event</h3>
@@ -550,6 +550,8 @@ import { useToast } from '../composables/useToast';
 
 const router = useRouter();
 const toast = useToast();
+
+let mouseDownTarget = null;
 
 const userName = ref('Researcher');
 const userRole = ref('member');

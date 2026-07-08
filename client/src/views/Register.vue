@@ -1,7 +1,7 @@
 <template>
   <div class="auth-wrapper">
     <div class="auth-container">
-      <h2 class="auth-title">Physics Lab Log System</h2>
+      <h2 class="auth-title">MUX | Lab Data OS</h2>
       <p class="auth-subtitle">Create your research account</p>
       
       <form @submit.prevent="handleRegister">

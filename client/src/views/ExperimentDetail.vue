@@ -147,7 +147,7 @@
                     <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display: inline-block; vertical-align: middle; margin-right: 6px; color: #64748b;"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
                     {{ col.date }}
                   </h4>
-                  <button class="btn-add-log-inline" v-if="userRole !== 'member'" @click="openAddLogModal(col.logs[0].shift_date)">+</button>
+                  <button class="btn-add-log-inline" @click="openAddLogModal(col.logs[0].shift_date)">+</button>
                 </div>
                 
                 <div class="cards-stack">
@@ -203,11 +203,10 @@
 
             <div class="empty-kanban-state" v-else>
               <p>📭 No operational logs recorded for this shift sequence yet.</p>
-              <button class="btn-add-first-log" v-if="userRole !== 'member'" @click="openAddLogModal">+ Record First Shift Log</button>
+              <button class="btn-add-first-log" @click="openAddLogModal()">+ Record First Shift Log</button>
             </div>
           </div>
 
-          <!-- 板块 5：👥 实验参与人员 (下移至最底部，日志栏下面) -->
           <div class="content-block" style="margin-top: 20px;">
             <div class="block-header">
               <h3 class="block-title">👥 5. Experiment Assigned Personnel</h3>
@@ -215,6 +214,7 @@
                 ⚙️ Manage Personnel
               </button>
             </div>
+            
             <div class="participants-list-row" v-if="experiment.members && experiment.members.length > 0">
               <div class="participant-chip" v-for="user in experiment.members" :key="user.id">
                 <img v-if="user.avatar_node" :src="getAvatarUrl(user.avatar_node)" class="p-avatar-img" />
@@ -226,7 +226,6 @@
               </div>
             </div>
             
-            <!-- 📊 科研值班贡献排行榜 (另起一行，按日志+附件总量降序排序，总量为0不显示) -->
             <div class="contribution-stats-box" v-if="contributorStats.length > 0" style="margin-top: 20px; border-top: 1px solid #e2e8f0; padding-top: 15px;">
               <h4 style="font-size: 13.5px; color: #475569; margin: 0 0 12px 0; text-align: left; display: flex; align-items: center; gap: 6px; font-weight: 600;">
                 <span>📊  Contribution Leaderboard</span>
@@ -237,7 +236,6 @@
                     Ranked by (ops + atts) descending.<br/>
                     • <span style="color: #38bdf8; font-weight: bold;">ops</span>: Logs participated as active Operator.<br/>
                     • <span style="color: #c084fc; font-weight: bold;">atts</span>: Attachments uploaded by this researcher.
-                    <!-- Small triangle arrow at the bottom -->
                     <span style="position: absolute; top: 100%; left: 50%; transform: translateX(-50%); border-width: 5px; border-style: solid; border-color: #1e293b transparent transparent transparent;"></span>
                   </span>
                 </span>
@@ -245,11 +243,9 @@
               <div class="stats-tree-list" style="display: flex; flex-direction: column; gap: 6px; text-align: left; max-width: 480px;">
                 <div class="stat-tree-node" v-for="(item, index) in contributorStats" :key="item.user.id" style="display: flex; align-items: center; justify-content: space-between; padding: 4px 0; position: relative;">
                   <div style="display: flex; align-items: center; gap: 4px;">
-                    <!-- 树状连接符 -->
                     <span style="font-family: monospace; color: #cbd5e1; font-weight: bold; font-size: 13px; margin-right: 6px; letter-spacing: -1px; user-select: none;">
                       {{ index === contributorStats.length - 1 ? '└──' : '├──' }}
                     </span>
-                    <!-- 排名序号 -->
                     <span :style="{
                       display: 'inline-flex',
                       alignItems: 'center',
@@ -266,7 +262,6 @@
                     }">
                       {{ index + 1 }}
                     </span>
-                    <!-- 头像与姓名 -->
                     <img v-if="item.user.avatar_node" :src="getAvatarUrl(item.user.avatar_node)" style="width: 22px; height: 22px; border-radius: 50%; object-fit: cover; border: 1px solid #cbd5e1; margin-right: 4px;" />
                     <span v-else style="font-size: 14px; margin-right: 4px;">👤</span>
                     <span style="font-size: 12.5px; font-weight: 600; color: #334155;">{{ item.user.first_name }} {{ item.user.last_name }}</span>
@@ -282,7 +277,8 @@
                 </div>
               </div>
             </div>
-            <div class="empty-personnel-tip" v-else>
+
+            <div class="empty-personnel-tip" v-if="!experiment.members || experiment.members.length === 0">
               💡 No specific personnel assigned. Click "Manage Personnel" to add members from your research team.
             </div>
           </div>
@@ -1398,7 +1394,7 @@ const goBackHome = (groupId) => {
 };
 const handleLogout = () => { localStorage.clear(); router.push('/login'); };
 const parseUTC = (isoStr) => {
-  if (!isoStr) return null;
+  if (!isoStr || typeof isoStr !== 'string') return null;
   let formatted = isoStr;
   if (!isoStr.endsWith('Z') && !isoStr.includes('+') && !/-\d{2}:\d{2}$/.test(isoStr)) {
     formatted = isoStr + 'Z';
@@ -1447,7 +1443,7 @@ const groupedColumns = computed(() => {
   background: rgba(15, 23, 42, 0.6) !important;
   backdrop-filter: blur(8px) !important; -webkit-backdrop-filter: blur(8px) !important;
   display: flex !important; justify-content: center !important; align-items: center !important;
-  z-index: 999999 !important;
+  z-index: var(--z-overlay) !important;
 }
 
 .log-detail-modal {

@@ -461,7 +461,8 @@ const submitNewExperiment = async () => {
 const fetchSystemTags = async () => {
   try {
     const response = await api.get('/experiments/tags');
-    allAvailableTags.value = response.data;
+    // Only display tags starting with '#' on the experiment dashboard
+    allAvailableTags.value = response.data.filter(t => t.name && t.name.startsWith('#'));
   } catch (error) {}
 };
 
@@ -764,7 +765,7 @@ const triggerManualSync = async () => {
   display: flex !important;
   justify-content: center !important;
   align-items: center !important;
-  z-index: 99999 !important;
+  z-index: var(--z-overlay) !important;
 }
 
 /* 2. 弹窗本体卡片：白净、圆润、重度悬浮阴影，附带优雅的淡入微动画 */

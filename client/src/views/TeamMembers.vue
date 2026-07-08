@@ -65,7 +65,7 @@
     </main>
 
     <Teleport to="body">
-      <div class="modal-backdrop" v-if="showDetailModal" @click.self="closeDetailModal">
+      <div class="modal-backdrop" v-if="showDetailModal" @click.self="closeDetailModal" style="z-index: var(--z-overlay)">
         <div class="modal-box profile-center-modal">
           <div class="profile-modal-layout" v-if="selectedMember">
             <div class="profile-mini-sidebar">
@@ -152,7 +152,7 @@
     </Teleport>
 
     <Teleport to="body">
-      <div class="modal-backdrop" v-if="showAddMemberModal" @click.self="closeAddMemberModal">
+      <div class="modal-backdrop" v-if="showAddMemberModal" @click.self="closeAddMemberModal" style="z-index: var(--z-overlay)">
         <div class="modal-box global-pool-picker-modal">
           <div class="modal-header">
             <div class="header-composite-title">

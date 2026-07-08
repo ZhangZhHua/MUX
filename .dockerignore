@@ -1,0 +1,8 @@
+**/._*
+._*
+.git
+.vscode
+.agents
+client/node_modules
+client/dist
+server/venv

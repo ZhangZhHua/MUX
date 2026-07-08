@@ -4,4 +4,11 @@ __pycache__/
 venv/
 dist/
 .env
-._*
+.*
+*.log
+chat.txt
+*.yml
+server/uploads/
+.env.production
+.env.prod
+.DS_Store

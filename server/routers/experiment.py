@@ -494,16 +494,13 @@ def delete_experiment(
         if experiment.group_id not in user_group_ids:
             raise HTTPException(status_code=403, detail="Permission denied. You can only delete experiments in your own research groups.")
             
-    activity = ActivityLog(
-        operator_id=current_user.id,
-        operator_name=f"{current_user.first_name} {current_user.last_name}",
-        action_type="DELETE_EXPERIMENT",
-        entity_type="EXPERIMENT",
-        entity_id=id,
-        details=f"Deleted experiment project: '{experiment.title}'",
-        created_at=datetime.utcnow()
+    log_telemetry_activity(
+        db=db,
+        user_id=current_user.id,
+        action="deleted the experiment",
+        target=experiment.title,
+        group_id=experiment.group_id
     )
-    db.add(activity)
     
     db.delete(experiment)
     db.commit()

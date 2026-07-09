@@ -433,7 +433,15 @@
               </div>
               
               <div class="modal-edit-action-row" style="display: flex; gap: 12px; margin-top: 16px;">
-                <button type="button" class="btn-inline-add" @click.stop.prevent="enterLogEditMode" style="flex: 1;">✍️ Edit This Log</button>
+                <button 
+                  v-if="userRole === 'sys_admin' || userRole === 'team_admin' || selectedLog?.author_id === currentUserId"
+                  type="button" 
+                  class="btn-inline-add" 
+                  @click.stop.prevent="enterLogEditMode" 
+                  style="flex: 1;"
+                >
+                  ✍️ Edit This Log
+                </button>
                 <button 
                   v-if="userRole === 'sys_admin' || userRole === 'team_admin' || selectedLog?.author_id === currentUserId"
                   type="button" 

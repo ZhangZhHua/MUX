@@ -181,15 +181,27 @@ def update_experiment_log(
     if not log:
         raise HTTPException(status_code=404, detail="Log record not found")
         
-    if log.author_id != current_user.id and current_user.role == "member":
-        raise HTTPException(status_code=403, detail="Permission denied. You can only edit your own logs.")
+    # 🔍 核心新增：顺藤摸瓜，通过日志关联的 experiment_id 反向捞出母体实验的信息
+    experiment = db.query(Experiment).filter(Experiment.id == log.experiment_id).first()
+
+    is_authorized = False
+    if current_user.role == "sys_admin":
+        is_authorized = True
+    elif current_user.role == "team_admin":
+        if experiment:
+            user_group_ids = [g.id for g in current_user.groups]
+            if experiment.group_id in user_group_ids:
+                is_authorized = True
+    else: # member
+        if log.author_id == current_user.id:
+            is_authorized = True
+            
+    if not is_authorized:
+        raise HTTPException(status_code=403, detail="Permission denied. You are not authorized to edit this log.")
         
     log.content = log_data.content
     log.participants = log_data.participants
     log.attachments = log_data.attachments 
-    
-    # 🔍 核心新增：顺藤摸瓜，通过日志关联的 experiment_id 反向捞出母体实验的信息
-    experiment = db.query(Experiment).filter(Experiment.id == log.experiment_id).first()
     
     if experiment:
         experiment.updated_at = datetime.utcnow()

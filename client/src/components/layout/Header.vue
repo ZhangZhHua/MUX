@@ -170,7 +170,11 @@ const showProfileModal = ref(false);
 const activeTab = ref('profile'); // profile | security
 
 const goHomeAndRefresh = () => {
-  window.location.href = '/';
+  if (window.location.pathname === '/') {
+    window.location.reload();
+  } else {
+    window.location.href = '/';
+  }
 };
 
 let mouseDownTarget = null;

@@ -136,9 +136,14 @@
 
           <!-- 板块 4：📋 每日日志看板 (下移为第四栏) -->
           <div class="content-block no-padding bg-kanban-track">
-            <div class="block-header padding-inside">
-              <h3 class="block-title">📋 4. Daily Log Kanban</h3>
-              <span class="kanban-tip">Logs auto-grouped by shift date ➔</span>
+            <div class="block-header padding-inside" style="display: flex; justify-content: space-between; align-items: center; width: 100%; box-sizing: border-box;">
+              <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
+                <h3 class="block-title">📋 4. Daily Log Kanban</h3>
+                <span class="kanban-tip">Logs auto-grouped by shift date ➔</span>
+              </div>
+              <button class="btn-record-log" @click="openAddLogModal(null)">
+                <span>➕ Record Daily Log</span>
+              </button>
             </div>
             
             <div class="kanban-scroll-row" v-if="groupedColumns.length > 0">
@@ -483,13 +488,18 @@
           <div class="modal-header">
             <div>
               <h3>Record New Shift Operational Log</h3>
-              <p v-if="addLogSelectedDate" class="modal-subtitle" style="text-align:left; color: #f59e0b; font-weight: 500; margin-top: 4px;">
-                📅 Target Log Date: <strong>{{ parseUTC(addLogSelectedDate).toLocaleDateString() }}</strong>
+              <p class="modal-subtitle" style="text-align:left; color: #64748b; font-weight: 500; margin-top: 4px;">
+                Select shift date and enter beam configurations
               </p>
             </div>
             <button class="btn-close-x" @click="closeAddLogModal">&times;</button>
           </div>
           <form @submit.prevent="submitNewLog" class="modal-form-flow">
+            <div class="modal-form-group">
+              <label>Shift / Operational Date *</label>
+              <input type="date" v-model="addLogDateInput" required class="form-input-date" />
+            </div>
+
             <div class="modal-form-group">
               <label>Log Content / Telemetry Records *</label>
               <textarea v-model="newLogContent" required rows="5" placeholder="Describe current beam state, cryostat configurations..."></textarea>
@@ -734,6 +744,7 @@ const showLogDetailModal = ref(false);
 const showAddLogModal = ref(false);
 const showPersonnelModal = ref(false);
 const addLogSelectedDate = ref(null);
+const addLogDateInput = ref('');
 
 let mouseDownTarget = null;
 
@@ -1058,13 +1069,17 @@ const removeFileFromNew = (filename) => {
 const submitNewLog = async () => {
   try {
     let logShiftDate = null;
-    if (addLogSelectedDate.value) {
-      const colDate = parseUTC(addLogSelectedDate.value);
+    if (addLogDateInput.value) {
+      const parts = addLogDateInput.value.split('-');
+      const year = parseInt(parts[0], 10);
+      const month = parseInt(parts[1], 10) - 1;
+      const day = parseInt(parts[2], 10);
+      
       const now = new Date();
       const targetDate = new Date(
-        colDate.getFullYear(),
-        colDate.getMonth(),
-        colDate.getDate(),
+        year,
+        month,
+        day,
         now.getHours(),
         now.getMinutes(),
         now.getSeconds()
@@ -1389,8 +1404,32 @@ const getImageStreamUrl = (filename) => {
 const closeLogModal = () => { showLogDetailModal.value = false; selectedLog.value = null; isLogEditingFlow.value = false; };
 const openLogDetails = (log) => { selectedLog.value = log; isLogEditingFlow.value = false; showLogDetailModal.value = true; };
 const closeModal = () => { showLogDetailModal.value = false; selectedLog.value = null; };
-const openAddLogModal = (targetDate = null) => { addLogSelectedDate.value = targetDate; selectedLogOperators.value = [userName.value]; showAddLogModal.value = true; };
-const closeAddLogModal = () => { showAddLogModal.value = false; newLogContent.value = ''; uploadedFileNames.value = []; selectedLogOperators.value = []; addLogSelectedDate.value = null; };
+const formatDateToYYYYMMDD = (date) => {
+  const d = new Date(date);
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
+const openAddLogModal = (targetDate = null) => {
+  addLogSelectedDate.value = targetDate;
+  if (targetDate) {
+    addLogDateInput.value = formatDateToYYYYMMDD(parseUTC(targetDate));
+  } else {
+    addLogDateInput.value = formatDateToYYYYMMDD(new Date());
+  }
+  selectedLogOperators.value = [userName.value];
+  showAddLogModal.value = true;
+};
+const closeAddLogModal = () => {
+  showAddLogModal.value = false;
+  newLogContent.value = '';
+  uploadedFileNames.value = [];
+  selectedLogOperators.value = [];
+  addLogSelectedDate.value = null;
+  addLogDateInput.value = '';
+};
 const closePersonnelModal = () => { showPersonnelModal.value = false; };
 const goBackHome = (groupId) => {
   if (typeof groupId === 'number') {
@@ -1614,6 +1653,41 @@ const groupedColumns = computed(() => {
 
 .btn-delete-meta { padding: 6px 12px; background: #fff; border: 1px solid #fecaca; border-radius: var(--radius-sm); font-size: 13px; cursor: pointer; font-weight: 600; color: #ef4444; margin-left: 8px; transition: all 0.15s ease; }
 .btn-delete-meta:hover { background: #fef2f2; border-color: #fca5a5; }
+
+.form-input-date {
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  box-sizing: border-box;
+  background-color: #fff;
+  color: var(--text-main);
+}
+.form-input-date:focus {
+  outline: none;
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+}
+
+.btn-record-log {
+  background: var(--primary-color);
+  color: #fff;
+  border: none;
+  padding: 6px 12px;
+  font-size: 13px;
+  font-weight: 600;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  box-shadow: 0 2px 4px rgba(37,99,235,0.1);
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.btn-record-log:hover {
+  background: var(--primary-hover);
+}
 
 .workspace-split {
   display: flex;

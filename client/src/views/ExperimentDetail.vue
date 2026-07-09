@@ -151,8 +151,8 @@
               </button>
             </div>
             
-            <div class="kanban-scroll-row" v-if="groupedColumns.length > 0">
-              <div v-for="col in groupedColumns" :key="col.date" class="kanban-column">
+            <div class="kanban-scroll-row" v-if="visibleGroupedColumns.length > 0" @scroll="handleKanbanScroll">
+              <div v-for="col in visibleGroupedColumns" :key="col.date" class="kanban-column">
                 <div class="col-header">
                   <h4>
                     <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display: inline-block; vertical-align: middle; margin-right: 6px; color: #64748b;"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
@@ -760,6 +760,7 @@ const editCurrentTaskInput = ref('');
 const expandedDates = ref(new Set());
 const KANBAN_LOG_LIMIT = 3;
 const kanbanDateFilter = ref('');
+const visibleColumnsCount = ref(14);
 
 // 第一栏实验详细大纲：折叠与展开状态，默认设为折叠 (false)
 const isOverviewExpanded = ref(false);
@@ -943,6 +944,7 @@ const fetchAllLogs = async () => {
   try {
     const response = await api.get(`/experiments/${experimentId}/logs`);
     rawLogs.value = response.data;
+    visibleColumnsCount.value = 14;
   } catch (error) {
     toast.error("Failed to sync log stream.");
   }
@@ -1558,6 +1560,23 @@ const groupedColumns = computed(() => {
   
   return columns;
 });
+
+const visibleGroupedColumns = computed(() => {
+  if (kanbanDateFilter.value) {
+    return groupedColumns.value;
+  }
+  return groupedColumns.value.slice(0, visibleColumnsCount.value);
+});
+
+const handleKanbanScroll = (event) => {
+  const container = event.target;
+  const scrollRight = container.scrollWidth - container.scrollLeft - container.clientWidth;
+  if (scrollRight < 300) {
+    if (visibleColumnsCount.value < groupedColumns.value.length) {
+      visibleColumnsCount.value += 7;
+    }
+  }
+};
 </script>
 
 <style>

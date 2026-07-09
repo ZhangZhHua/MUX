@@ -8,7 +8,7 @@
       <div class="logo-row">
         <MuxLogo />
       </div>
-      <h2 class="auth-title">Welcome back</h2>
+      <!-- <h2 class="auth-title">Welcome back</h2> -->
       <p class="auth-subtitle">Sign in to MUX Lab Data OS</p>
       
       <form @submit.prevent="handleLogin" class="auth-form">
@@ -61,6 +61,7 @@ const handleLogin = async () => {
     localStorage.setItem('token', response.data.access_token);
     localStorage.setItem('role', response.data.role);
     localStorage.setItem('userName', response.data.full_name);
+    localStorage.setItem('userId', response.data.user_id);
     
     toast.success("Welcome back!");
     router.push('/');

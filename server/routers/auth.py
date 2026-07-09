@@ -84,7 +84,8 @@ def login(login_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depen
         "access_token": access_token, 
         "token_type": "bearer", 
         "role": user.role,
-        "full_name": full_name  # 🆕 返回给前端
+        "full_name": full_name,  # 🆕 返回给前端
+        "user_id": user.id
     }
 
 # --- 3. 指定团队管理员（仅限系统管理员操作） ---

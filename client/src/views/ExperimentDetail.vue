@@ -432,8 +432,17 @@
                 </div>
               </div>
               
-              <div class="modal-edit-action-row">
-                <button type="button" class="btn-inline-add" @click.stop.prevent="enterLogEditMode">✍️ Edit This Log Content & Files</button>
+              <div class="modal-edit-action-row" style="display: flex; gap: 12px; margin-top: 16px;">
+                <button type="button" class="btn-inline-add" @click.stop.prevent="enterLogEditMode" style="flex: 1;">✍️ Edit This Log</button>
+                <button 
+                  v-if="userRole === 'sys_admin' || userRole === 'team_admin' || selectedLog?.author_id === currentUserId"
+                  type="button" 
+                  class="btn-inline-delete" 
+                  @click.stop.prevent="handleDeleteLog(selectedLog?.id)"
+                  style="flex: 1;"
+                >
+                  🗑️ Delete This Log
+                </button>
               </div>
             </div>
           </div>
@@ -705,6 +714,7 @@ const { confirm } = useConfirmDialog();
 
 const userName = ref('');
 const userRole = ref('');
+const currentUserId = ref(Number(localStorage.getItem('userId') || 0));
 const userGroups = ref([]);
 const activeGroupId = ref(Number(localStorage.getItem('activeGroupId') || 0));
 const isSidebarOpen = ref(false);
@@ -818,6 +828,14 @@ const experimentId = route.params.id;
 onMounted(async () => {
   userName.value = localStorage.getItem('userName') || 'Researcher';
   userRole.value = localStorage.getItem('role') || 'member';
+  currentUserId.value = Number(localStorage.getItem('userId') || 0);
+  try {
+    const meRes = await api.get('/auth/me');
+    currentUserId.value = meRes.data.id;
+    localStorage.setItem('userId', meRes.data.id);
+  } catch (err) {
+    console.error("Failed to fetch user context", err);
+  }
   await fetchExperimentMeta();
   await fetchAllLogs();
   await fetchUserGroups();
@@ -1404,6 +1422,24 @@ const getImageStreamUrl = (filename) => {
 const closeLogModal = () => { showLogDetailModal.value = false; selectedLog.value = null; isLogEditingFlow.value = false; };
 const openLogDetails = (log) => { selectedLog.value = log; isLogEditingFlow.value = false; showLogDetailModal.value = true; };
 const closeModal = () => { showLogDetailModal.value = false; selectedLog.value = null; };
+
+const handleDeleteLog = async (logId) => {
+  if (!logId) return;
+  const isConfirmed = await confirm(
+    "Are you sure you want to permanently delete this daily log card? This action CANNOT be undone.",
+    "⚠️ Delete Log Card"
+  );
+  if (!isConfirmed) return;
+
+  try {
+    await api.delete(`/experiments/logs/${logId}`);
+    toast.success("Log card deleted successfully.");
+    closeLogModal();
+    await fetchAllLogs();
+  } catch (error) {
+    toast.error(error.response?.data?.detail || "Failed to delete log card.");
+  }
+};
 const formatDateToYYYYMMDD = (date) => {
   const d = new Date(date);
   const year = d.getFullYear();
@@ -1687,6 +1723,26 @@ const groupedColumns = computed(() => {
 }
 .btn-record-log:hover {
   background: var(--primary-hover);
+}
+
+.btn-inline-delete {
+  padding: 8px 16px;
+  background: #fef2f2;
+  border: 1px solid #fca5a5;
+  border-radius: var(--radius-sm);
+  color: #ef4444;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+.btn-inline-delete:hover {
+  background: #fee2e2;
+  border-color: #f87171;
 }
 
 .workspace-split {

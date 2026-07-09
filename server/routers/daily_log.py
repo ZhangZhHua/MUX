@@ -188,23 +188,65 @@ def update_experiment_log(
     log.participants = log_data.participants
     log.attachments = log_data.attachments 
     
+    # 🔍 核心新增：顺藤摸瓜，通过日志关联的 experiment_id 反向捞出母体实验的信息
+    experiment = db.query(Experiment).filter(Experiment.id == log.experiment_id).first()
+    
     if experiment:
         experiment.updated_at = datetime.utcnow()
     db.commit()
-
-    # 🔍 核心新增：顺藤摸瓜，通过日志关联的 experiment_id 反向捞出母体实验的信息
-    experiment = db.query(Experiment).filter(Experiment.id == log.experiment_id).first()
-    parent_title = experiment.title if experiment else f"Exp #{log.experiment_id}"
-    parent_group_id = experiment.group_id if experiment else None
 
     # 🎯 核心新增：在日志修改成功瞬间，向审计流水表追加一条【日志修改】记录！
     log_telemetry_activity(
         db,
         current_user.id,
         "modified log in",  # 精准动词
-        f"[{parent_title}]",             # 绑定实验标题
-        parent_group_id                 # 传入真实的 group_id 用于主页空间隔离过滤
+        f"[{experiment.title if experiment else 'Unknown'}]",             # 绑定实验标题
+        experiment.group_id if experiment else None                 # 传入真实的 group_id 用于主页空间隔离过滤
     )
 
     db.refresh(log)
     return log
+
+
+# 6. 删除日志
+@router.delete("/logs/{log_id}")
+def delete_experiment_log(
+    log_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    log = db.query(DailyLog).filter(DailyLog.id == log_id).first()
+    if not log:
+        raise HTTPException(status_code=404, detail="Log record not found")
+        
+    # 权限规则：创建者本人，或者超级管理员，或者该实验所属研究组的组长可以删除
+    experiment = db.query(Experiment).filter(Experiment.id == log.experiment_id).first()
+    
+    is_authorized = False
+    if current_user.role == "sys_admin":
+        is_authorized = True
+    elif current_user.role == "team_admin":
+        if experiment:
+            user_group_ids = [g.id for g in current_user.groups]
+            if experiment.group_id in user_group_ids:
+                is_authorized = True
+    else: # member
+        if log.author_id == current_user.id:
+            is_authorized = True
+            
+    if not is_authorized:
+        raise HTTPException(status_code=403, detail="Permission denied. You are not authorized to delete this log.")
+        
+    db.delete(log)
+    db.commit()
+    
+    if experiment:
+        log_telemetry_activity(
+            db,
+            current_user.id,
+            "deleted a log in",
+            f"[{experiment.title}]",
+            experiment.group_id
+        )
+        
+    return {"status": "success", "message": "Log deleted successfully"}

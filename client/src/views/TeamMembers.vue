@@ -575,6 +575,11 @@ const handleLogout = () => { localStorage.clear(); window.location.href = '/logi
 .pool-search-container { display: flex; align-items: center; gap: 10px; background: #f1f5f9; border: 1px solid #e2e8f0; border-radius: 8px; padding: 8px 14px; margin: 16px 0; }
 .candidates-scroll-y { max-height: 260px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; border: 1px solid #e2e8f0; padding: 6px; border-radius: 8px; background: #fafbfc; }
 .candidate-row-card { display: flex; justify-content: space-between; align-items: center; background: #ffffff; border: 1px solid #e2e8f0; border-radius: 6px; padding: 8px 12px; }
+.cand-left { display: flex; align-items: center; gap: 12px; }
+.cand-avatar { width: 40px; height: 40px; background: #f1f5f9; border-radius: 50%; display: flex; align-items: center; justify-content: center; overflow: hidden; border: 1px solid #e2e8f0; font-size: 18px; flex-shrink: 0; }
+.cand-info { text-align: left; }
+.cand-info h4 { margin: 0 0 2px 0; font-size: 14px; font-weight: 700; color: #0f172a; }
+.cand-info p { margin: 0; font-size: 11px; color: #64748b; }
 
 .group-scope-pack {
   margin-bottom: 8px;

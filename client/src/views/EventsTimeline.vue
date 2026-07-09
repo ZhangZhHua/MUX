@@ -1657,7 +1657,7 @@ const getTagColorClass = (name) => {
 
 @media (max-width: 1023px) {
   .main-content {
-    height: auto !important;
+    height: calc(100vh - 64px) !important;
     overflow-y: auto !important;
   }
   .workspace-container {

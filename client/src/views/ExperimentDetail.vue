@@ -1554,7 +1554,7 @@ const groupedColumns = computed(() => {
 
 @media (max-width: 1023px) {
   .detail-main {
-    height: auto !important;
+    height: calc(100vh - 64px) !important;
     overflow-y: auto !important;
   }
   .workspace-split {

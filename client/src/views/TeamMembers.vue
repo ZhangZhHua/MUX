@@ -360,7 +360,7 @@ const handleLogout = () => { localStorage.clear(); window.location.href = '/logi
 
 @media (max-width: 1023px) {
   .team-main-content {
-    height: auto !important;
+    height: calc(100vh - 64px) !important;
     overflow-y: auto !important;
   }
   .team-container-box {

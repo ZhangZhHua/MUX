@@ -1,6 +1,11 @@
 <template>
   <header class="global-header">
     <div class="header-left">
+      <button class="hamburger-menu" @click="$emit('toggle-sidebar')" aria-label="Toggle Navigation Sidebar">
+        <span class="hamburger-bar"></span>
+        <span class="hamburger-bar"></span>
+        <span class="hamburger-bar"></span>
+      </button>
       <MuxLogo />
     </div>
 
@@ -59,6 +64,9 @@
                 </button>
                 <button class="tab-menu-item" :class="{ active: activeTab === 'security' }" @click="activeTab = 'security'">
                   🔐 Account Security
+                </button>
+                <button type="button" class="tab-menu-item btn-mobile-logout" @click="handleMobileLogout">
+                  🚪 Logout Account
                 </button>
               </div>
             </div>
@@ -230,6 +238,11 @@ const openProfileModal = async () => {
 };
 
 const closeProfileModal = () => {
+  showProfileModal.value = false;
+};
+
+const handleMobileLogout = () => {
+  emit('logout');
   showProfileModal.value = false;
 };
 
@@ -515,5 +528,73 @@ const getAvatarUrl = (node) => `${api.defaults.baseURL}/experiments/attachments/
   border: 1px solid #cbd5e1;
   display: inline-block;
   vertical-align: middle;
+}
+
+/* Hamburger menu button styles */
+.hamburger-menu {
+  display: none;
+  flex-direction: column;
+  justify-content: space-around;
+  width: 22px;
+  height: 18px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  margin-right: 8px;
+  outline: none;
+}
+.hamburger-bar {
+  width: 22px;
+  height: 2.5px;
+  background-color: #475569;
+  border-radius: 5px;
+  transition: all 0.2s ease;
+}
+
+.btn-mobile-logout {
+  display: none;
+  color: #ef4444 !important;
+  border-top: 1px dashed rgba(239, 68, 68, 0.2);
+  margin-top: 12px;
+}
+
+@media (max-width: 767px) {
+  .hamburger-menu {
+    display: flex;
+  }
+  .header-center {
+    display: none; /* Hide search bar on mobile */
+  }
+  .role-badge, .user-name-text, .btn-logout {
+    display: none; /* Hide redundant elements to avoid overflowing */
+  }
+  .global-header {
+    padding: 0 16px;
+  }
+  
+  /* Make the profile trigger modal more responsive */
+  .profile-center-modal {
+    width: 92% !important;
+    height: auto !important;
+    max-height: 90vh !important;
+  }
+  .profile-modal-layout {
+    flex-direction: column;
+  }
+  .profile-mini-sidebar {
+    width: 100% !important;
+    height: auto !important;
+    border-right: none !important;
+    border-bottom: 1px solid #e2e8f0;
+    padding: 20px !important;
+  }
+  .profile-main-form-stage {
+    padding: 20px !important;
+    overflow-y: visible !important;
+  }
+  .btn-mobile-logout {
+    display: flex !important;
+  }
 }
 </style>

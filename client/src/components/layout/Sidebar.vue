@@ -1,5 +1,11 @@
 <template>
-  <aside class="global-sidebar">
+  <div>
+    <!-- Mobile Sidebar Backdrop Overlay -->
+    <div class="sidebar-mobile-backdrop" v-if="isOpen" @click="$emit('close')"></div>
+
+    <aside class="global-sidebar" :class="{ 'is-open': isOpen }">
+      <!-- Mobile Sidebar Close Button -->
+      <button class="btn-close-sidebar" @click="$emit('close')" aria-label="Close Sidebar">&times;</button>
     <div class="team-selector-zone">
       <div class="team-header-row">
         <label class="sidebar-label">RESEARCH TEAM</label>
@@ -90,6 +96,7 @@
       </div>
     </Teleport>
   </aside>
+  </div>
 </template>
 
 <script setup>
@@ -100,10 +107,11 @@ import { useToast } from '../../composables/useToast';
 
 defineProps({
   groups: { type: Array, default: () => [] },
-  currentGroupId: { type: Number, default: 0 }
+  currentGroupId: { type: Number, default: 0 },
+  isOpen: { type: Boolean, default: false }
 });
 
-const emit = defineEmits(['group-change']);
+const emit = defineEmits(['group-change', 'close']);
 
 const router = useRouter();
 const route = useRoute();
@@ -261,5 +269,55 @@ const handleCommitNewGroup = async () => {
   font-size: 13.5px;
   font-weight: 700;
   color: var(--text-main);
+}
+
+/* Responsive sidebar and backdrop styles */
+.sidebar-mobile-backdrop {
+  display: none;
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(15, 23, 42, 0.4);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  z-index: var(--z-overlay);
+}
+
+.btn-close-sidebar {
+  display: none;
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  background: transparent;
+  border: none;
+  font-size: 26px;
+  color: var(--text-muted);
+  cursor: pointer;
+  line-height: 1;
+}
+
+@media (max-width: 767px) {
+  .sidebar-mobile-backdrop {
+    display: block;
+  }
+  .btn-close-sidebar {
+    display: block;
+  }
+  .global-sidebar {
+    position: fixed !important;
+    top: 0;
+    left: 0;
+    height: 100vh;
+    width: 240px;
+    z-index: calc(var(--z-overlay) + 10);
+    transform: translateX(-100%);
+    transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    box-shadow: 10px 0 25px rgba(15, 23, 42, 0.15) !important;
+  }
+  .global-sidebar.is-open {
+    transform: translateX(0);
+  }
+  .telemetry-clocks-panel {
+    display: none !important; /* Hide clocks panel in mobile sidebar, already hidden in header */
+  }
 }
 </style>

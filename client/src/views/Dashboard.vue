@@ -1,8 +1,8 @@
 <template>
   <div class="dashboard-layout">
-    <Header :userName="userName" :userRole="userRole" @logout="handleLogout" />
+    <Header :userName="userName" :userRole="userRole" @logout="handleLogout" @toggle-sidebar="isSidebarOpen = !isSidebarOpen" />
     
-    <Sidebar :groups="groups" :currentGroupId="currentGroupId" @group-change="handleGroupChange" />
+    <Sidebar :groups="groups" :currentGroupId="currentGroupId" :isOpen="isSidebarOpen" @group-change="handleGroupChange" @close="isSidebarOpen = false" />
 
     <main class="main-content">
       <div class="workspace-container">
@@ -283,6 +283,8 @@ const allAvailableTags = ref([]);
 const currentGroupId = ref(Number(localStorage.getItem('activeGroupId') || 0));
 const selectedTag = ref(null);
 const selectedStatus = ref(null);
+
+const isSidebarOpen = ref(false);
 
 const filteredExperiments = computed(() => {
   if (!selectedStatus.value) return experiments.value;
@@ -617,6 +619,39 @@ const triggerManualSync = async () => {
   height: 100%;
   overflow-y: auto;
   padding-right: 4px;
+}
+
+@media (max-width: 1023px) {
+  .main-content {
+    height: auto !important;
+    overflow-y: auto !important;
+  }
+  .workspace-container {
+    flex-direction: column !important;
+    overflow-y: visible !important;
+    height: auto !important;
+    gap: 24px !important;
+  }
+  .workspace-right {
+    width: 100% !important;
+    height: auto !important;
+    overflow-y: visible !important;
+    padding-right: 0 !important;
+  }
+  .filter-matrix-bar {
+    flex-direction: column !important;
+    align-items: stretch !important;
+  }
+}
+
+@media (max-width: 767px) {
+  .main-content {
+    margin-left: 0 !important;
+    padding: 16px !important;
+  }
+  .welcome-banner h2 {
+    font-size: 20px !important;
+  }
 }
 .workspace-right::-webkit-scrollbar {
   width: 6px;

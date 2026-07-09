@@ -1,7 +1,7 @@
 <template>
   <div class="team-page-layout">
-    <Header :userName="userName" :userRole="userRole" @logout="handleLogout" />
-    <Sidebar :groups="userGroups" :currentGroupId="activeGroupId" @group-change="handleGroupChange" />
+    <Header :userName="userName" :userRole="userRole" @logout="handleLogout" @toggle-sidebar="isSidebarOpen = !isSidebarOpen" />
+    <Sidebar :groups="userGroups" :currentGroupId="activeGroupId" :isOpen="isSidebarOpen" @group-change="handleGroupChange" @close="isSidebarOpen = false" />
 
     <main class="team-main-content">
       <div class="team-container-box">
@@ -209,6 +209,7 @@ const activeGroupId = ref(Number(localStorage.getItem('activeGroupId') || 0));
 const memberList = ref([]);
 
 let mouseDownTarget = null;
+const isSidebarOpen = ref(false);
 
 const activeGroupName = computed(() => {
   if (activeGroupId.value === 0) return 'All My Teams';
@@ -356,6 +357,66 @@ const handleLogout = () => { localStorage.clear(); window.location.href = '/logi
   height: calc(100vh - 64px);
   overflow: hidden;
 }
+
+@media (max-width: 1023px) {
+  .team-main-content {
+    height: auto !important;
+    overflow-y: auto !important;
+  }
+  .team-container-box {
+    height: auto !important;
+    overflow-y: visible !important;
+  }
+  .members-card-grid {
+    height: auto !important;
+    overflow-y: visible !important;
+    padding-right: 0 !important;
+  }
+}
+
+@media (max-width: 767px) {
+  .team-main-content {
+    margin-left: 0 !important;
+    padding: 16px !important;
+  }
+  .team-view-banner {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 16px !important;
+  }
+  .banner-right {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 10px !important;
+  }
+  .total-count-tag {
+    text-align: center !important;
+  }
+  .members-card-grid {
+    grid-template-columns: 1fr !important;
+  }
+  
+  .profile-center-modal {
+    width: 92% !important;
+    height: auto !important;
+    max-height: 90vh !important;
+  }
+  .profile-modal-layout {
+    flex-direction: column !important;
+  }
+  .profile-mini-sidebar {
+    width: 100% !important;
+    height: auto !important;
+    border-right: none !important;
+    border-bottom: 1px solid #e2e8f0;
+    padding: 20px !important;
+  }
+  .profile-main-form-stage {
+    padding: 20px !important;
+    overflow-y: visible !important;
+  }
+}
+
 .team-container-box {
   max-width: 1300px;
   margin: 0 auto;

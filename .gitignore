@@ -12,3 +12,6 @@ server/uploads/
 .env.production
 .env.prod
 .DS_Store
+docker-compose.prod.yml
+docker-compose.yml
+DEPLOY.md

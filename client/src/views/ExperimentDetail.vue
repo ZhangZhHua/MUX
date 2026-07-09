@@ -1,9 +1,9 @@
 <template>
   <div class="detail-layout">
     <!-- 1. 全局顶部栏 -->
-    <Header :userName="userName" :userRole="userRole" @logout="handleLogout" />
+    <Header :userName="userName" :userRole="userRole" @logout="handleLogout" @toggle-sidebar="isSidebarOpen = !isSidebarOpen" />
     <!-- 2. 全局左侧栏 -->
-    <Sidebar :groups="userGroups" :currentGroupId="activeGroupId" :isAdmin="true" @group-change="goBackHome" />
+    <Sidebar :groups="userGroups" :currentGroupId="activeGroupId" :isOpen="isSidebarOpen" @group-change="goBackHome" @close="isSidebarOpen = false" />
 
     <!-- 3. 实验内页主舞台 -->
     <main class="detail-main" v-if="experiment">
@@ -23,6 +23,7 @@
         </div>
         <div class="meta-right" v-if="userRole !== 'member'">
           <button class="btn-edit-meta" @click="openEditMetaModal">⚙️ Edit Experiment Info</button>
+          <button class="btn-delete-meta" @click="handleDeleteExperiment">🗑️ Delete Experiment</button>
         </div>
       </div>
 
@@ -685,15 +686,18 @@ import { useToast } from '../composables/useToast';
 import Header from '../components/layout/Header.vue';
 import Sidebar from '../components/layout/Sidebar.vue';
 import ImageLightbox from '../components/common/ImageLightbox.vue';
+import { useConfirmDialog } from '../composables/useConfirmDialog';
 
 const router = useRouter();
 const route = useRoute();
 const toast = useToast();
+const { confirm } = useConfirmDialog();
 
 const userName = ref('');
 const userRole = ref('');
 const userGroups = ref([]);
 const activeGroupId = ref(Number(localStorage.getItem('activeGroupId') || 0));
+const isSidebarOpen = ref(false);
 
 const experiment = ref(null);
 const rawLogs = ref([]);
@@ -1395,6 +1399,21 @@ const goBackHome = (groupId) => {
   router.push('/');
 };
 const handleLogout = () => { localStorage.clear(); router.push('/login'); };
+const handleDeleteExperiment = async () => {
+  const isConfirmed = await confirm(
+    "Are you sure you want to permanently delete this experiment project? This will erase all logs, checklists, bulletins, and events linked to it. This action CANNOT be undone.",
+    "⚠️ Delete Experiment Project"
+  );
+  if (!isConfirmed) return;
+
+  try {
+    await api.delete(`/experiments/${experimentId}`);
+    toast.success("Experiment project deleted successfully.");
+    router.push('/');
+  } catch (error) {
+    toast.error(error.response?.data?.detail || "Failed to delete experiment project.");
+  }
+};
 const parseUTC = (isoStr) => {
   if (!isoStr || typeof isoStr !== 'string') return null;
   let formatted = isoStr;
@@ -1532,6 +1551,49 @@ const groupedColumns = computed(() => {
   display: flex;
   flex-direction: column;
 }
+
+@media (max-width: 1023px) {
+  .detail-main {
+    height: auto !important;
+    overflow-y: auto !important;
+  }
+  .workspace-split {
+    flex-direction: column !important;
+    height: auto !important;
+    overflow-y: visible !important;
+    gap: 24px !important;
+  }
+  .canvas-center {
+    height: auto !important;
+    overflow-y: visible !important;
+    padding-right: 0 !important;
+  }
+  .utility-dock {
+    width: 100% !important;
+    height: auto !important;
+    overflow-y: visible !important;
+    padding-right: 0 !important;
+  }
+  .kanban-scroll-row {
+    padding: 0 16px 16px 16px !important;
+  }
+}
+
+@media (max-width: 767px) {
+  .detail-main {
+    margin-left: 0 !important;
+    padding: 16px !important;
+  }
+  .exp-meta-bar {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 16px !important;
+  }
+  .log-detail-modal {
+    padding: 20px !important;
+  }
+}
+
 .exp-meta-bar { display: flex; justify-content: space-between; align-items: flex-end; border-bottom: 1px solid var(--border-color); padding-bottom: 16px; margin-bottom: 24px; flex-shrink: 0; }
 .btn-back { background: transparent; border: none; color: var(--primary-color); font-size: 13px; font-weight: 600; cursor: pointer; padding: 0; }
 .title-row { display: flex; align-items: center; gap: 16px; margin: 4px 0 6px 0; }
@@ -1549,6 +1611,9 @@ const groupedColumns = computed(() => {
 
 .btn-edit-meta { padding: 6px 12px; background: #fff; border: 1px solid var(--border-color); border-radius: var(--radius-sm); font-size: 13px; cursor: pointer; font-weight: 600; color: var(--text-main); }
 .btn-edit-meta:hover { background: #f8fafc; border-color: #cbd5e1; }
+
+.btn-delete-meta { padding: 6px 12px; background: #fff; border: 1px solid #fecaca; border-radius: var(--radius-sm); font-size: 13px; cursor: pointer; font-weight: 600; color: #ef4444; margin-left: 8px; transition: all 0.15s ease; }
+.btn-delete-meta:hover { background: #fef2f2; border-color: #fca5a5; }
 
 .workspace-split {
   display: flex;

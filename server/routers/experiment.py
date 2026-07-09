@@ -474,3 +474,37 @@ def delete_experiment_step(
         exp.updated_at = datetime.utcnow()
     db.commit()
     return {"status": "success", "message": "Step deleted successfully"}
+
+
+@router.delete("/{id}")
+def delete_experiment(
+    id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    if current_user.role not in ["sys_admin", "team_admin"]:
+        raise HTTPException(status_code=403, detail="Permission denied. Only admins can delete experiments.")
+        
+    experiment = db.query(Experiment).filter(Experiment.id == id).first()
+    if not experiment:
+        raise HTTPException(status_code=404, detail="Experiment project not found.")
+        
+    if current_user.role == "team_admin":
+        user_group_ids = [g.id for g in current_user.groups]
+        if experiment.group_id not in user_group_ids:
+            raise HTTPException(status_code=403, detail="Permission denied. You can only delete experiments in your own research groups.")
+            
+    activity = ActivityLog(
+        operator_id=current_user.id,
+        operator_name=f"{current_user.first_name} {current_user.last_name}",
+        action_type="DELETE_EXPERIMENT",
+        entity_type="EXPERIMENT",
+        entity_id=id,
+        details=f"Deleted experiment project: '{experiment.title}'",
+        created_at=datetime.utcnow()
+    )
+    db.add(activity)
+    
+    db.delete(experiment)
+    db.commit()
+    return {"status": "success", "message": "Experiment deleted successfully"}

@@ -6,7 +6,7 @@
         <span class="hamburger-bar"></span>
         <span class="hamburger-bar"></span>
       </button>
-      <MuxLogo />
+      <MuxLogo @click="goHomeAndRefresh" style="cursor: pointer;" />
     </div>
 
     <div class="header-center">
@@ -168,6 +168,10 @@ const toast = useToast();
 
 const showProfileModal = ref(false);
 const activeTab = ref('profile'); // profile | security
+
+const goHomeAndRefresh = () => {
+  window.location.href = '/';
+};
 
 let mouseDownTarget = null;
 
@@ -578,6 +582,7 @@ const getAvatarUrl = (node) => `${api.defaults.baseURL}/experiments/attachments/
     width: 92% !important;
     height: auto !important;
     max-height: 90vh !important;
+    overflow-y: auto !important;
   }
   .profile-modal-layout {
     flex-direction: column;

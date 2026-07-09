@@ -400,6 +400,7 @@ const handleLogout = () => { localStorage.clear(); window.location.href = '/logi
     width: 92% !important;
     height: auto !important;
     max-height: 90vh !important;
+    overflow-y: auto !important;
   }
   .profile-modal-layout {
     flex-direction: column !important;

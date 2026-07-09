@@ -136,10 +136,15 @@
 
           <!-- 板块 4：📋 每日日志看板 (下移为第四栏) -->
           <div class="content-block no-padding bg-kanban-track">
-            <div class="block-header padding-inside" style="display: flex; justify-content: space-between; align-items: center; width: 100%; box-sizing: border-box;">
-              <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
+            <div class="block-header padding-inside" style="display: flex; justify-content: space-between; align-items: center; width: 100%; box-sizing: border-box; flex-wrap: wrap; gap: 12px;">
+              <div style="display: flex; align-items: center; gap: 16px; flex-wrap: wrap;">
                 <h3 class="block-title">📋 4. Daily Log Kanban</h3>
                 <span class="kanban-tip">Logs auto-grouped by shift date ➔</span>
+                <div class="kanban-filter-control" style="display: flex; align-items: center; gap: 8px; margin-left: 8px;">
+                  <span style="font-size: 12px; color: var(--text-muted); font-weight: 500;">📅 Date Filter:</span>
+                  <input type="date" v-model="kanbanDateFilter" class="form-input-date-filter" />
+                  <button v-if="kanbanDateFilter" class="btn-reset-filter-icon" @click="kanbanDateFilter = ''" title="Reset filter">&times;</button>
+                </div>
               </div>
               <button class="btn-record-log" @click="openAddLogModal(null)">
                 <span>➕ Record Daily Log</span>
@@ -207,6 +212,10 @@
               </div>
             </div>
 
+            <div class="empty-kanban-state" v-else-if="kanbanDateFilter">
+              <p>🔍 No operational logs found matching the selected date: <strong>{{ kanbanDateFilter }}</strong></p>
+              <button class="btn-add-first-log" @click="kanbanDateFilter = ''" style="background: var(--primary-color); border: none; color: #fff;">Clear Date Filter</button>
+            </div>
             <div class="empty-kanban-state" v-else>
               <p>📭 No operational logs recorded for this shift sequence yet.</p>
               <button class="btn-add-first-log" @click="openAddLogModal()">+ Record First Shift Log</button>
@@ -750,6 +759,7 @@ const editCurrentTaskInput = ref('');
 // Kanban columns logs limit states
 const expandedDates = ref(new Set());
 const KANBAN_LOG_LIMIT = 3;
+const kanbanDateFilter = ref('');
 
 // 第一栏实验详细大纲：折叠与展开状态，默认设为折叠 (false)
 const isOverviewExpanded = ref(false);
@@ -1524,7 +1534,7 @@ const groupedColumns = computed(() => {
     map[dateStr].push(log);
   });
   
-  const columns = Object.keys(map).map(date => {
+  let columns = Object.keys(map).map(date => {
     const representativeDate = parseUTC(map[date][0].shift_date);
     const dateMidnight = new Date(
       representativeDate.getFullYear(),
@@ -1535,6 +1545,17 @@ const groupedColumns = computed(() => {
   });
   
   columns.sort((a, b) => b.timeVal - a.timeVal);
+  
+  if (kanbanDateFilter.value) {
+    const filterParts = kanbanDateFilter.value.split('-');
+    const filterYear = parseInt(filterParts[0], 10);
+    const filterMonth = parseInt(filterParts[1], 10) - 1;
+    const filterDay = parseInt(filterParts[2], 10);
+    const filterLocalDateStr = new Date(filterYear, filterMonth, filterDay).toLocaleDateString();
+    
+    columns = columns.filter(col => col.date === filterLocalDateStr);
+  }
+  
   return columns;
 });
 </script>
@@ -1751,6 +1772,42 @@ const groupedColumns = computed(() => {
 .btn-inline-delete:hover {
   background: #fee2e2;
   border-color: #f87171;
+}
+
+.form-input-date-filter {
+  padding: 4px 8px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  background-color: #fff;
+  color: var(--text-main);
+  height: 28px;
+  box-sizing: border-box;
+}
+.form-input-date-filter:focus {
+  outline: none;
+  border-color: var(--primary-color);
+}
+.btn-reset-filter-icon {
+  background: #f1f5f9;
+  border: 1px solid #cbd5e1;
+  border-radius: 50%;
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  color: #64748b;
+  cursor: pointer;
+  line-height: 1;
+  padding: 0;
+  margin-left: -4px;
+  transition: all 0.15s ease;
+}
+.btn-reset-filter-icon:hover {
+  background: #e2e8f0;
+  color: #334155;
 }
 
 .workspace-split {

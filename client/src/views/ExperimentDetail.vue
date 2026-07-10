@@ -36,9 +36,9 @@
             <div class="block-header">
               <div class="header-left-meta">
                 <h3 class="block-title">📜 1. Detailed Overview Document</h3>
-                <span class="collapse-hint-text" @click="isOverviewExpanded = !isOverviewExpanded">
+                <!-- <span class="collapse-hint-text" @click="isOverviewExpanded = !isOverviewExpanded">
                   {{ isOverviewExpanded ? '▼ Click to hide overview document' : '▶ Click to expand USTC overview document' }}
-                </span>
+                </span> -->
               </div>
               <div class="editor-controls">
                 <select v-model="editFormatType" class="format-select" :disabled="isMarkdownMode || !isOverviewExpanded">

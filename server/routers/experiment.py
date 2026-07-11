@@ -27,6 +27,11 @@ def create_experiment(
     # 检查用户权限，只有非普通成员才能创建实验项目
     if current_user.role == "member":
         raise HTTPException(status_code=403, detail="普通成员无权创建实验项目")
+    
+    # 私人Group访问控制
+    group = db.query(Group).filter(Group.id == exp_data.group_id).first()
+    if group and group.is_private and group.owner_id != current_user.id and current_user.role != "sys_admin":
+        raise HTTPException(status_code=403, detail="You cannot create experiments in another user's private workspace.")
         
     # 创建新的实验实例，使用提供的数据填充各个字段
     # 如果未提供状态，则默认设置为"running"
@@ -63,11 +68,16 @@ def get_experiments(
         # 如果非超级管理员，只捞取自己隶属的所有团队的实验；超管则捞取全量
         if current_user.role != "sys_admin":
             my_group_ids = [g.id for g in current_user.groups]
-            query = db.query(Experiment).filter(Experiment.group_id.in_(my_group_ids))
+            query = db.query(Experiment).filter(Experiment.group_id.in_(my_group_ids), Experiment.is_deleted == False)
         else:
-            query = db.query(Experiment)
+            query = db.query(Experiment).filter(Experiment.is_deleted == False)
     else:
-        query = db.query(Experiment).filter(Experiment.group_id == group_id)
+        # 私人Group访问控制：非owner且非sys_admin无法查看
+        if current_user.role != "sys_admin":
+            group = db.query(Group).filter(Group.id == group_id).first()
+            if group and group.is_private and group.owner_id != current_user.id:
+                raise HTTPException(status_code=403, detail="You cannot access this private workspace.")
+        query = db.query(Experiment).filter(Experiment.group_id == group_id, Experiment.is_deleted == False)
 
     if tag:
         query = query.join(Experiment.tags).filter(Tag.name == tag)
@@ -99,6 +109,60 @@ def create_global_tag(
     db.commit()
     db.refresh(new_tag)
     return new_tag
+
+# --- 回收站 (Recycle Bin) 接口 ---
+
+@router.get("/trash", response_model=List[ExperimentResponse])
+def get_trash_experiments(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """管理员查看已删除的实验（回收站）"""
+    if current_user.role not in ["sys_admin", "team_admin"]:
+        raise HTTPException(status_code=403, detail="Permission denied. Only admins can access recycle bin.")
+    
+    if current_user.role == "sys_admin":
+        query = db.query(Experiment).filter(Experiment.is_deleted == True)
+    else:
+        user_group_ids = [g.id for g in current_user.groups]
+        query = db.query(Experiment).filter(
+            Experiment.is_deleted == True,
+            Experiment.group_id.in_(user_group_ids)
+        )
+    
+    return query.order_by(Experiment.deleted_at.desc()).all()
+
+
+@router.put("/{id}/restore")
+def restore_experiment(
+    id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """管理员从回收站恢复实验"""
+    if current_user.role not in ["sys_admin", "team_admin"]:
+        raise HTTPException(status_code=403, detail="Permission denied. Only admins can restore experiments.")
+    
+    experiment = db.query(Experiment).filter(Experiment.id == id, Experiment.is_deleted == True).first()
+    if not experiment:
+        raise HTTPException(status_code=404, detail="Deleted experiment not found in recycle bin.")
+    
+    if current_user.role == "team_admin":
+        user_group_ids = [g.id for g in current_user.groups]
+        if experiment.group_id not in user_group_ids:
+            raise HTTPException(status_code=403, detail="Permission denied.")
+    
+    experiment.is_deleted = False
+    experiment.deleted_at = None
+    experiment.updated_at = datetime.utcnow()
+    db.commit()
+    
+    log_telemetry_activity(
+        db, current_user.id, "restored experiment", f"[{experiment.title}]", experiment.group_id
+    )
+    
+    return {"status": "success", "message": f"Experiment '{experiment.title}' restored successfully."}
+
 
 @router.get("/{id}", response_model=ExperimentResponse)
 def get_single_experiment(id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
@@ -502,6 +566,35 @@ def delete_experiment(
         group_id=experiment.group_id
     )
     
+    # Soft delete: mark as deleted instead of physical removal
+    experiment.is_deleted = True
+    experiment.deleted_at = datetime.utcnow()
+    db.commit()
+    return {"status": "success", "message": "Experiment moved to recycle bin. Admin can restore from Settings."}
+
+
+@router.delete("/{id}/permanent")
+def permanent_delete_experiment(
+    id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """系统管理员永久删除实验（不可恢复）"""
+    if current_user.role != "sys_admin":
+        raise HTTPException(status_code=403, detail="Permission denied. Only System Admin can permanently delete experiments.")
+    
+    experiment = db.query(Experiment).filter(Experiment.id == id).first()
+    if not experiment:
+        raise HTTPException(status_code=404, detail="Experiment not found.")
+    
+    title = experiment.title
+    gid = experiment.group_id
+    
     db.delete(experiment)
     db.commit()
-    return {"status": "success", "message": "Experiment deleted successfully"}
+    
+    log_telemetry_activity(
+        db, current_user.id, "permanently deleted experiment", f"[{title}]", gid
+    )
+    
+    return {"status": "success", "message": f"Experiment '{title}' permanently destroyed."}

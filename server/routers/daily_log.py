@@ -1,4 +1,5 @@
 import os
+import re
 from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, status, File, UploadFile, Request
 from fastapi.responses import FileResponse
@@ -71,6 +72,51 @@ def upload_file(file: UploadFile = File(...), current_user: User = Depends(get_c
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"File write error on lab server: {str(e)}")
+
+# 1b. 粘贴图片专用上传（自动生成 picture_pasted_XXX 文件名）
+@router.post("/upload/paste")
+def upload_pasted_image(file: UploadFile = File(...), current_user: User = Depends(get_current_user)):
+    try:
+        # Check size limit: 50MB
+        file.file.seek(0, 2)
+        file_size = file.file.tell()
+        file.file.seek(0)
+        
+        if file_size > 50 * 1024 * 1024:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Image size exceeds the maximum limit of 50MB"
+            )
+        
+        # Determine extension from original filename or content-type
+        original_name = file.filename or "image.png"
+        ext = original_name.rsplit(".", 1)[-1].lower() if "." in original_name else "png"
+        if ext not in ("png", "jpg", "jpeg", "gif", "webp", "bmp"):
+            ext = "png"
+        
+        # Find next available sequence number
+        existing_files = os.listdir(UPLOAD_DIR)
+        max_seq = 0
+        pattern = re.compile(r"^picture_pasted_(\d{3})\.")
+        for fname in existing_files:
+            m = pattern.match(fname)
+            if m:
+                seq = int(m.group(1))
+                if seq > max_seq:
+                    max_seq = seq
+        
+        next_seq = max_seq + 1
+        saved_name = f"picture_pasted_{next_seq:03d}.{ext}"
+        file_path = os.path.join(UPLOAD_DIR, saved_name)
+        
+        with open(file_path, "wb") as f:
+            f.write(file.file.read())
+        
+        return {"filename": saved_name}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Pasted image write error: {str(e)}")
 
 # 2. 物理二进制安全下载与预览
 @router.get("/attachments/{filename}")

@@ -21,9 +21,19 @@
             <span class="hash-tag" v-for="t in experiment.tags" :key="t.id">{{ t.name }}</span>
           </div>
         </div>
-        <div class="meta-right" v-if="userRole !== 'member'">
-          <button class="btn-edit-meta" @click="openEditMetaModal">⚙️ Edit Experiment Info</button>
-          <button class="btn-delete-meta" @click="handleDeleteExperiment">🗑️ Delete Experiment</button>
+        <div class="meta-right">
+          <button 
+            class="btn-export-pdf" 
+            :disabled="isExporting" 
+            @click="handleExportPdf"
+            :title="isExporting ? '正在生成 PDF...' : '导出实验全部信息为 PDF 文件'"
+          >
+            {{ isExporting ? '⏳ Generating PDF...' : '📄 Export PDF' }}
+          </button>
+          <template v-if="userRole !== 'member'">
+            <button class="btn-edit-meta" @click="openEditMetaModal">⚙️ Edit Experiment Info</button>
+            <button class="btn-delete-meta" @click="handleDeleteExperiment">🗑️ Delete Experiment</button>
+          </template>
         </div>
       </div>
 
@@ -468,7 +478,7 @@
           <form @submit.prevent="handleSaveLogEdit" class="modal-form-flow" v-else>
             <div class="modal-form-group">
               <label>Modify Log Content *</label>
-              <textarea v-model="editLogContent" required rows="5"></textarea>
+              <textarea v-model="editLogContent" required rows="5" @paste="handleLogPaste($event, true)"></textarea>
             </div>
             
             <div class="modal-form-group">
@@ -528,7 +538,7 @@
 
             <div class="modal-form-group">
               <label>Log Content / Telemetry Records *</label>
-              <textarea v-model="newLogContent" required rows="5" placeholder="Describe current beam state, cryostat configurations..."></textarea>
+              <textarea v-model="newLogContent" required rows="5" placeholder="Describe current beam state, cryostat configurations...&#10;💡 Tip: You can paste screenshots directly (Ctrl+V / Cmd+V)!" @paste="handleLogPaste($event, false)"></textarea>
             </div>
 
             <div class="modal-form-group">
@@ -723,11 +733,13 @@ import Header from '../components/layout/Header.vue';
 import Sidebar from '../components/layout/Sidebar.vue';
 import ImageLightbox from '../components/common/ImageLightbox.vue';
 import { useConfirmDialog } from '../composables/useConfirmDialog';
+import { usePdfExport } from '../composables/usePdfExport';
 
 const router = useRouter();
 const route = useRoute();
 const toast = useToast();
 const { confirm } = useConfirmDialog();
+const { isExporting, exportToPdf } = usePdfExport();
 
 const userName = ref('');
 const userRole = ref('');
@@ -829,6 +841,44 @@ const removeBulletin = async (bulletinId) => {
 
 const selectedLog = ref(null);
 const newLogContent = ref('');
+
+// 粘贴图片处理：检测剪贴板图片，自动上传并存为附件
+const handleLogPaste = async (event, isEditMode) => {
+  const items = event.clipboardData?.items;
+  if (!items) return;
+  
+  for (let i = 0; i < items.length; i++) {
+    const item = items[i];
+    if (item.type.startsWith('image/')) {
+      event.preventDefault(); // 阻止默认的 base64 blob 插入
+      const blob = item.getAsFile();
+      if (!blob) continue;
+      
+      // 重命名为临时名称
+      const ext = blob.type.split('/')[1] || 'png';
+      const file = new File([blob], `clipboard_${Date.now()}.${ext}`, { type: blob.type });
+      
+      toast.info('📋 Uploading pasted image...');
+      const formData = new FormData();
+      formData.append('file', file);
+      
+      try {
+        const res = await api.post('/experiments/upload/paste', formData);
+        const filename = res.data.filename;
+        
+        if (isEditMode) {
+          editLogAttachments.value.push(filename);
+        } else {
+          uploadedFileNames.value.push(filename);
+        }
+        toast.success(`✅ Image saved as ${filename}`);
+      } catch (err) {
+        toast.error('Failed to upload pasted image.');
+      }
+      break; // 只处理第一张图片
+    }
+  }
+};
 const selectedLogOperators = ref([]);
 
 // 动态多附件物理数组
@@ -1577,6 +1627,34 @@ const handleKanbanScroll = (event) => {
     }
   }
 };
+
+// PDF 导出功能
+const handleExportPdf = async () => {
+  if (!experiment.value) return;
+  
+  try {
+    // 构建 Markdown 编译后的 HTML（针对 PDF 内联样式版本）
+    const descHtml = editFormatType.value === 'markdown'
+      ? compileMarkdown(editDescription.value)
+      : `<pre style="white-space: pre-wrap; font-family: monospace; font-size: 13px; line-height: 1.6; color: #334155;">${editDescription.value || 'No document description recorded.'}</pre>`;
+
+    await exportToPdf({
+      experiment: experiment.value,
+      descriptionHtml: descHtml,
+      bulletins: bulletins.value,
+      steps: stepsList.value,
+      groupedLogColumns: groupedColumns.value, // 已经按日期倒序
+      contributorStats: contributorStats.value,
+      allAttachments: allFlattenedAttachments.value,
+      apiBaseUrl: api.defaults.baseURL || window.location.origin
+    });
+    
+    toast.success('PDF exported successfully! Check your downloads folder.');
+  } catch (error) {
+    console.error('PDF export error:', error);
+    toast.error('Failed to export PDF. Please try again.');
+  }
+};
 </script>
 
 <style>
@@ -1731,6 +1809,31 @@ const handleKanbanScroll = (event) => {
 
 .meta-tags { display: flex; gap: 6px; }
 .hash-tag { font-size: 12px; background: #e2e8f0; color: #475569; padding: 2px 8px; border-radius: 4px; }
+
+.btn-export-pdf {
+  padding: 6px 14px;
+  background: #2563eb;
+  color: #fff;
+  border: none;
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  cursor: pointer;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  transition: all 0.2s ease;
+  box-shadow: 0 2px 4px rgba(37, 99, 235, 0.15);
+}
+.btn-export-pdf:hover:not(:disabled) {
+  background: #1d4ed8;
+  box-shadow: 0 4px 8px rgba(37, 99, 235, 0.25);
+}
+.btn-export-pdf:disabled {
+  background: #93c5fd;
+  cursor: not-allowed;
+  box-shadow: none;
+}
 
 .btn-edit-meta { padding: 6px 12px; background: #fff; border: 1px solid var(--border-color); border-radius: var(--radius-sm); font-size: 13px; cursor: pointer; font-weight: 600; color: var(--text-main); }
 .btn-edit-meta:hover { background: #f8fafc; border-color: #cbd5e1; }

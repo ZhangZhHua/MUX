@@ -62,6 +62,26 @@ def register_user(user_data: UserCreate, db: Session = Depends(get_db)):
         new_user.groups = associated_groups
 
     db.add(new_user)
+    db.flush()  # 先 flush 以获取 new_user.id
+    
+    # 自动创建私人 Group
+    private_name = f"[Private] {new_user.first_name} {new_user.last_name}"
+    counter = 1
+    while db.query(Group).filter(Group.name == private_name).first():
+        private_name = f"[Private] {new_user.first_name} {new_user.last_name} ({counter})"
+        counter += 1
+    
+    private_group = Group(
+        name=private_name,
+        description=f"Personal workspace for {new_user.first_name} {new_user.last_name}",
+        is_private=True,
+        owner_id=new_user.id
+    )
+    db.add(private_group)
+    db.flush()
+    
+    # 将用户加入自己的私人 Group
+    new_user.groups.append(private_group)
     db.commit()
     db.refresh(new_user)
     return new_user
@@ -289,8 +309,22 @@ def get_user_groups(db: Session = Depends(get_db), current_user: User = Depends(
     if current_user.role == "sys_admin":
         return db.query(Group).order_by(Group.name.asc()).all()
     
-    # 普通研究员，返回其加入的群组列表
-    return current_user.groups
+    # 普通用户：返回自己的所有组，但过滤掉别人的私人Group
+    visible_groups = []
+    for g in current_user.groups:
+        if g.is_private and g.owner_id != current_user.id:
+            continue  # Skip other users' private groups
+        visible_groups.append(g)
+    
+    # Also include user's own private group if not already included
+    own_private = db.query(Group).filter(
+        Group.is_private == True, 
+        Group.owner_id == current_user.id
+    ).first()
+    if own_private and own_private not in visible_groups:
+        visible_groups.append(own_private)
+    
+    return sorted(visible_groups, key=lambda g: g.name)
 
 
 # 🆕 2. 新增：将指定科学家从某个课题组编制中物理移除（组织瘦身与反锁死断路器）

@@ -3,6 +3,7 @@ from sqlalchemy import Table, Column, Integer, String, Text, ForeignKey, DateTim
 from sqlalchemy.orm import relationship
 from datetime import datetime
 from config.database import Base
+from models.user import Group
 # EventTag model to separate event tags from experiment tags
 class EventTag(Base):
     __tablename__ = "event_tags"
@@ -33,6 +34,7 @@ class LabEvent(Base):
     description = Column(Text, nullable=False)      # Event introduction (事件介绍)
     experiment_id = Column(Integer, ForeignKey('experiments.id', ondelete="SET NULL"), nullable=True)
     author_id = Column(Integer, ForeignKey('users.id', ondelete="CASCADE"), nullable=False)
+    group_id = Column(Integer, ForeignKey('groups.id', ondelete="CASCADE"), nullable=False)  # Event belongs to a specific research group
     start_date = Column(DateTime, nullable=False)  # Base date of the event
     end_date = Column(DateTime, nullable=True)     # End date/time of the event
     is_important = Column(Boolean, default=False, nullable=False) # For high-priority milestones
@@ -67,6 +69,7 @@ class LabEvent(Base):
     # Relationships
     experiment = relationship("Experiment")
     author = relationship("User")
+    group = relationship("Group")
     tags = relationship("EventTag", secondary=event_tag_association)
     participants = relationship("User", secondary=event_participant_association)
     comments = relationship("EventComment", back_populates="event", cascade="all, delete-orphan")

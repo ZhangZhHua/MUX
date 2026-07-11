@@ -7,7 +7,7 @@ from typing import List, Optional
 from config.database import get_db
 from models.event import LabEvent, EventComment, EventTag
 from models.experiment import Experiment
-from models.user import User
+from models.user import User, Group
 from schemas.event import EventCreate, EventResponse, EventCommentCreate, EventCommentResponse, EventTagResponse
 from routers.auth import get_current_user
 from routers.experiment import log_telemetry_activity
@@ -79,33 +79,19 @@ def get_occurrences_for_event(event: LabEvent, view_start: date, view_end: date)
     return occurrences
 
 
-def check_event_access(event: LabEvent, user: User, db: Session):
+# Helper: get the set of group IDs accessible by a user
+def get_user_accessible_group_ids(user: User) -> set:
     if user.role == "sys_admin":
-        return True
-    
-    # Check if they share any research groups with the event author
-    author_groups = {g.id for g in event.author.groups}
-    user_groups = {g.id for g in user.groups}
-    if author_groups.intersection(user_groups):
-        return True
-        
-    # Check if the associated experiment belongs to user's groups
-    if event.experiment_id:
-        exp = db.query(Experiment).filter(Experiment.id == event.experiment_id).first()
-        if exp and exp.group_id in user_groups:
-            return True
-            
-    raise HTTPException(
-        status_code=status.HTTP_403_FORBIDDEN,
-        detail="You do not have access permissions for this lab event."
-    )
+        return None  # None means all groups
+    return {g.id for g in user.groups}
 
 
-# 1. Fetch Events for a given start_date (displays 7 days starting from start_date, or custom range if end_date is provided)
+# 1. Fetch Events with optional group_id filtering
 @router.get("", response_model=List[EventResponse])
 def get_events(
     start_date: str = Query(..., description="Start date of the range in YYYY-MM-DD format"),
     end_date: Optional[str] = Query(None, description="End date of the range in YYYY-MM-DD format"),
+    group_id: Optional[int] = Query(None, description="Filter events by group. 0 = all user groups, omit for all accessible"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -122,22 +108,32 @@ def get_events(
     else:
         view_end = view_start + timedelta(days=6)
     
-    # Query all events that could overlap (non-parent or parent template events)
-    all_events = db.query(LabEvent).filter(
-        # Either the event has no parent (base event) OR it is an exception override event
-        # (exceptions are single non-recurring occurrences with a parent_event_id)
-        (LabEvent.parent_event_id == None) | (LabEvent.parent_event_id != None)
-    ).all()
+    # Determine which group IDs to include
+    accessible_groups = get_user_accessible_group_ids(current_user)
+    
+    # Build the base query
+    query = db.query(LabEvent)
+    
+    if accessible_groups is not None:
+        # Non-sys_admin: only see events from their own groups
+        if group_id is not None and group_id > 0:
+            # Specific group selected — check user belongs to it
+            if group_id not in accessible_groups:
+                raise HTTPException(status_code=403, detail="You do not have access to this research group.")
+            query = query.filter(LabEvent.group_id == group_id)
+        else:
+            # All My Teams or no filter specified — all user's groups
+            query = query.filter(LabEvent.group_id.in_(accessible_groups))
+    else:
+        # sys_admin: see everything, optionally filter by specific group
+        if group_id is not None and group_id > 0:
+            query = query.filter(LabEvent.group_id == group_id)
+    
+    all_events = query.all()
     
     expanded_events = []
     
     for event in all_events:
-        # Check permissions
-        try:
-            check_event_access(event, current_user, db)
-        except HTTPException:
-            continue
-            
         # Get occurrences
         occurrences = get_occurrences_for_event(event, view_start, view_end)
         
@@ -145,7 +141,6 @@ def get_events(
         exp_title = event.experiment.title if event.experiment else None
         
         for occ in occurrences:
-            # For base events or standalone events, occ is a date object
             occ_str = occ.strftime("%Y-%m-%d")
             
             # Construct a response object
@@ -163,16 +158,7 @@ def get_events(
                     resp.end_date = resp.start_date + duration
                 else:
                     resp.end_date = None
-                    
-            # If it's a child exception instance, it is already returned directly in all_events.
-            # So if this event has a parent, it is an exception instance.
-            # If it's a parent template event, we expand it. But wait, if we expanded a parent template event,
-            # we should make sure we don't duplicate with the override exception event if it's in the same week.
-            # The get_occurrences_for_event helper handles this by checking event.exception_dates.
-            # So if an override event exists for Date X, Date X is added to the parent's exception_dates,
-            # meaning get_occurrences_for_event(parent) will NOT return Date X.
-            # Instead, the child override event (which is also in all_events) will return Date X directly.
-            # This works perfectly!
+            
             expanded_events.append(resp)
             
     # Sort events by instance_date and then by created_at
@@ -187,6 +173,20 @@ def create_event(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
+    # Validate user belongs to the specified group
+    if current_user.role != "sys_admin":
+        user_group_ids = {g.id for g in current_user.groups}
+        if event_in.group_id not in user_group_ids:
+            raise HTTPException(
+                status_code=403, 
+                detail="You can only create events in groups you belong to."
+            )
+    
+    # Verify the group exists
+    group = db.query(Group).filter(Group.id == event_in.group_id).first()
+    if not group:
+        raise HTTPException(status_code=404, detail="Research group not found.")
+    
     # Resolve tags
     db_tags = []
     for tag_name in event_in.tags:
@@ -211,6 +211,7 @@ def create_event(
         description=event_in.description,
         experiment_id=event_in.experiment_id,
         author_id=current_user.id,
+        group_id=event_in.group_id,
         start_date=event_in.start_date,
         end_date=event_in.end_date,
         is_important=event_in.is_important,
@@ -231,7 +232,7 @@ def create_event(
         user_id=current_user.id,
         action="created a schedule event",
         target=f"Event #{db_event.id}: {db_event.title}",
-        group_id=current_user.groups[0].id if current_user.groups else None
+        group_id=event_in.group_id
     )
     
     return db_event
@@ -251,10 +252,22 @@ def update_event(
     if not db_event:
         raise HTTPException(status_code=404, detail="Event not found")
         
-    # Check permissions (author or admin)
+    # Check permissions (author or admin, and group membership)
     if db_event.author_id != current_user.id and current_user.role != "sys_admin":
-        raise HTTPException(status_code=403, detail="Permission denied. You can only edit your own events.")
-        
+        # team_admin can edit events in their own groups
+        if current_user.role == "team_admin":
+            user_group_ids = {g.id for g in current_user.groups}
+            if db_event.group_id not in user_group_ids:
+                raise HTTPException(status_code=403, detail="Permission denied. You can only edit events in your own groups.")
+        else:
+            raise HTTPException(status_code=403, detail="Permission denied. You can only edit your own events.")
+    
+    # Validate group_id change
+    if current_user.role != "sys_admin":
+        user_group_ids = {g.id for g in current_user.groups}
+        if event_in.group_id not in user_group_ids:
+            raise HTTPException(status_code=403, detail="You can only assign events to groups you belong to.")
+    
     # Handle Tags
     db_tags = []
     for tag_name in event_in.tags:
@@ -300,11 +313,10 @@ def update_event(
             description=event_in.description,
             experiment_id=event_in.experiment_id,
             author_id=current_user.id,
+            group_id=event_in.group_id,
             start_date=override_start,
             end_date=override_end,
             is_important=event_in.is_important,
-            recurrence_rule=None,  # STANDALONE override
-            recurrence_end_date=None,
             parent_event_id=db_event.id,
             tags=db_tags,
             participants=db_participants
@@ -317,29 +329,31 @@ def update_event(
         log_telemetry_activity(
             db,
             user_id=current_user.id,
-            action="modified a single occurrence of event",
-            target=f"Event #{db_event.id} occurrence on {instance_date}",
-            group_id=current_user.groups[0].id if current_user.groups else None
+            action="modified event instance",
+            target=f"Event #{child_event.id}: {child_event.title} (override)",
+            group_id=event_in.group_id
         )
+        
         return child_event
-
     else:
-        # Modify series or modifying standalone
+        # Update series or standalone event
         db_event.title = event_in.title
         db_event.description = event_in.description
         db_event.experiment_id = event_in.experiment_id
+        db_event.group_id = event_in.group_id
         db_event.start_date = event_in.start_date
         db_event.end_date = event_in.end_date
         db_event.is_important = event_in.is_important
+        db_event.attachments = event_in.attachments
         db_event.recurrence_rule = event_in.recurrence_rule
         db_event.recurrence_end_date = event_in.recurrence_end_date
-        db_event.attachments = event_in.attachments
-        # Resolve participants for series update
+        db_event.tags = db_tags
+        
+        # Update participants
         db_participants = []
         if event_in.participants:
             db_participants = db.query(User).filter(User.id.in_(event_in.participants)).all()
         db_event.participants = db_participants
-        db_event.tags = db_tags
         
         db.commit()
         db.refresh(db_event)
@@ -347,19 +361,20 @@ def update_event(
         log_telemetry_activity(
             db,
             user_id=current_user.id,
-            action="updated schedule event series",
+            action="modified event",
             target=f"Event #{db_event.id}: {db_event.title}",
-            group_id=current_user.groups[0].id if current_user.groups else None
+            group_id=event_in.group_id
         )
+        
         return db_event
 
 
-# 4. Delete Event (Supports Series or Instance deletion)
-@router.delete("/{id}", status_code=204)
+# 4. Delete Event (series or instance)
+@router.delete("/{id}")
 def delete_event(
     id: int,
-    instance_date: Optional[str] = Query(None, description="The specific date of the instance being deleted, if any"),
-    delete_series: bool = Query(True, description="Whether to delete the entire series or just this occurrence"),
+    delete_series: bool = Query(False, description="True to delete entire series, False for single occurrence"),
+    instance_date: Optional[str] = Query(None, description="Specific date of the occurrence to delete"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -369,11 +384,17 @@ def delete_event(
         
     # Check permissions
     if db_event.author_id != current_user.id and current_user.role != "sys_admin":
-        raise HTTPException(status_code=403, detail="Permission denied. You can only delete your own events.")
-        
-    # Deleting a single instance of a recurring event
+        if current_user.role == "team_admin":
+            user_group_ids = {g.id for g in current_user.groups}
+            if db_event.group_id not in user_group_ids:
+                raise HTTPException(status_code=403, detail="Permission denied.")
+        else:
+            raise HTTPException(status_code=403, detail="Permission denied.")
+    
+    group_id = db_event.group_id
+    
+    # If recurring event and not deleting the whole series, add exception
     if db_event.recurrence_rule and not delete_series and instance_date:
-        # Add to exceptions
         exceptions = []
         if db_event.exception_dates:
             try:
@@ -383,23 +404,14 @@ def delete_event(
         if instance_date not in exceptions:
             exceptions.append(instance_date)
             db_event.exception_dates = json.dumps(exceptions)
-            
-        # Also, check if there is an existing override event for this parent on this day, delete it if so
-        override_event = db.query(LabEvent).filter(
-            LabEvent.parent_event_id == db_event.id,
-            LabEvent.start_date >= datetime.strptime(instance_date, "%Y-%m-%d"),
-            LabEvent.start_date < datetime.strptime(instance_date, "%Y-%m-%d") + timedelta(days=1)
-        ).first()
-        if override_event:
-            db.delete(override_event)
-            
-        db.commit()
+            db.commit()
+        
         log_telemetry_activity(
             db,
             user_id=current_user.id,
-            action="deleted a single occurrence of event",
-            target=f"Event #{db_event.id} occurrence on {instance_date}",
-            group_id=current_user.groups[0].id if current_user.groups else None
+            action="deleted event occurrence",
+            target=f"Event #{id} on {instance_date}",
+            group_id=group_id
         )
         return
         
@@ -413,7 +425,7 @@ def delete_event(
             user_id=current_user.id,
             action="deleted event series",
             target=f"Event #{id}",
-            group_id=current_user.groups[0].id if current_user.groups else None
+            group_id=group_id
         )
         return
 
@@ -436,7 +448,10 @@ def add_comment(
     if not db_event:
         raise HTTPException(status_code=404, detail="Event not found")
         
-    check_event_access(db_event, current_user, db)
+    # Check access by group membership
+    accessible_groups = get_user_accessible_group_ids(current_user)
+    if accessible_groups is not None and db_event.group_id not in accessible_groups:
+        raise HTTPException(status_code=403, detail="You do not have access to this event.")
     
     db_comment = EventComment(
         event_id=db_event.id,
@@ -460,7 +475,10 @@ def get_comments(
     if not db_event:
         raise HTTPException(status_code=404, detail="Event not found")
         
-    check_event_access(db_event, current_user, db)
+    # Check access by group membership
+    accessible_groups = get_user_accessible_group_ids(current_user)
+    if accessible_groups is not None and db_event.group_id not in accessible_groups:
+        raise HTTPException(status_code=403, detail="You do not have access to this event.")
     
     comments = db.query(EventComment).filter(EventComment.event_id == id).order_by(EventComment.created_at.asc()).all()
     return comments

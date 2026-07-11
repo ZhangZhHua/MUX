@@ -1,7 +1,7 @@
 from pydantic import BaseModel
 from datetime import datetime
 from typing import Optional, List
-from schemas.user import UserResponse
+from schemas.user import UserResponse, GroupMinResponse
 from schemas.experiment import TagResponse  # 🆕 Let's check if TagResponse exists or define a simple one
 
 class EventTagResponse(BaseModel):
@@ -15,6 +15,7 @@ class EventCreate(BaseModel):
     title: str
     description: str
     experiment_id: Optional[int] = None
+    group_id: int  # Event belongs to a specific research group
     start_date: datetime
     end_date: Optional[datetime] = None
     is_important: Optional[bool] = False
@@ -32,6 +33,8 @@ class EventResponse(BaseModel):
     experiment_title: Optional[str] = None
     author_id: int
     author: UserResponse
+    group_id: int
+    group: Optional[GroupMinResponse] = None
     start_date: datetime
     end_date: Optional[datetime] = None
     is_important: bool

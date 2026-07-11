@@ -35,6 +35,8 @@ class ExperimentResponse(BaseModel):
     current_task: Optional[str] = ""     # 🆕 响应报文中包含目前正在执行的任务
     format_type: str
     status: str                          # 🆕 响应报文中包含当前状态
+    is_deleted: bool = False
+    deleted_at: Optional[datetime] = None
     created_at: datetime
     updated_at: datetime
     tags: List[TagResponse] = []

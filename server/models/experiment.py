@@ -35,6 +35,8 @@ class Experiment(Base):
     
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    is_deleted = Column(Boolean, default=False, nullable=False)  # 软删除标记
+    deleted_at = Column(DateTime, nullable=True)  # 删除时间
 
     group = relationship("Group")
     tags = relationship("Tag", secondary=experiment_tag_association, back_populates="experiments")

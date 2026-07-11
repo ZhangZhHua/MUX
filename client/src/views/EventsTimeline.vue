@@ -88,6 +88,11 @@
                     </div>
 
                     <div class="event-author-row">
+                      <!-- Group badge -->
+                      <span v-if="event.group" class="group-badge" :title="'Research Group: ' + event.group.name">
+                        🏷️ {{ event.group.name }}
+                      </span>
+                      
                       <!-- Experiment association link -->
                       <span v-if="event.experiment_id" class="exp-link-badge" @click="navigateToExperiment(event.experiment_id)">
                         🔬 Linked Exp: {{ event.experiment_title || `#${event.experiment_id}` }}
@@ -325,6 +330,17 @@
               </div>
             </div>
 
+            <!-- Group Assignment -->
+            <div class="modal-form-group">
+              <label>Assign to Research Group *</label>
+              <select v-model="formEvent.group_id" required class="modal-select-input">
+                <option value="" disabled>-- Select a Research Group --</option>
+                <option v-for="g in groups" :key="g.id" :value="g.id">
+                  🔬 {{ g.name }}
+                </option>
+              </select>
+            </div>
+
             <!-- Experiment Link -->
             <div class="modal-form-group">
               <label>Link to Research Experiment (Optional)</label>
@@ -478,7 +494,7 @@
             </button>
             <div style="flex: 1;"></div>
             <button type="button" class="btn-cancel" @click="closeEventModal">Cancel</button>
-            <button type="submit" class="btn-submit" :disabled="!formEvent.title.trim() || !formEvent.description.trim()">
+            <button type="submit" class="btn-submit" :disabled="!formEvent.title.trim() || !formEvent.description.trim() || !formEvent.group_id">
               Deploy Node
             </button>
           </div>
@@ -665,7 +681,12 @@ const fetchCalendarDots = async () => {
   const startStr = cells[0].dateStr;
   const endStr = cells[cells.length - 1].dateStr;
   try {
-    const res = await api.get(`/events?start_date=${startStr}&end_date=${endStr}`);
+    const gid = currentGroupId.value || 0;
+    let dotsUrl = `/events?start_date=${startStr}&end_date=${endStr}`;
+    if (gid > 0) {
+      dotsUrl += `&group_id=${gid}`;
+    }
+    const res = await api.get(dotsUrl);
     const dotsMap = {};
     res.data.forEach(event => {
       if (event.instance_date) {
@@ -681,6 +702,11 @@ const fetchCalendarDots = async () => {
 watch(calendarMonth, () => {
   fetchCalendarDots();
 }, { immediate: true });
+
+// 确保切换 Group 时刷新日历小点（配合 calendarMonth 变化）
+watch(currentGroupId, () => {
+  fetchCalendarDots();
+});
 
 const monthNames = [
   'January', 'February', 'March', 'April', 'May', 'June',
@@ -813,6 +839,7 @@ const formEvent = ref({
   description: '',
   dateStr: '',
   timeStr: '',
+  group_id: 0,
   experiment_id: null,
   tags: [],
   recurrence_rule: null,
@@ -887,6 +914,7 @@ const handleGroupChange = (groupId) => {
   currentGroupId.value = groupId;
   localStorage.setItem('activeGroupId', groupId);
   loadWeekEvents();
+  fetchCalendarDots();
 };
 
 const fetchExperiments = async () => {
@@ -958,7 +986,12 @@ const loadWeekEvents = async () => {
     const mondayStr = selectedDateISO.value;
     // We send the Monday string, backend returns events matching start_date to start_date + 6 days
     const formattedMon = `${activeMonday.value.getFullYear()}-${String(activeMonday.value.getMonth() + 1).padStart(2, '0')}-${String(activeMonday.value.getDate()).padStart(2, '0')}`;
-    const res = await api.get(`/events?start_date=${formattedMon}`);
+    const gid = currentGroupId.value || 0;
+    let eventsUrl = `/events?start_date=${formattedMon}`;
+    if (gid > 0) {
+      eventsUrl += `&group_id=${gid}`;
+    }
+    const res = await api.get(eventsUrl);
     
     eventsList.value = res.data;
     
@@ -1150,6 +1183,7 @@ const openCreateModal = (dateStr = null) => {
     dateStr: targetDateStr,
     timeStr: `${hr}:${min}`,
     endTimeStr: `${endHr}:${endMin}`,
+    group_id: currentGroupId.value && currentGroupId.value > 0 ? currentGroupId.value : (groups.value.length === 1 ? groups.value[0].id : 0),
     experiment_id: null,
     tags: [],
     recurrence_rule: null,
@@ -1213,6 +1247,7 @@ const openEditModal = (event) => {
     dateStr: `${yr}-${mo}-${dy}`, // Default to the selected instance date or base date
     timeStr: `${hr}:${min}`,
     endTimeStr,
+    group_id: event.group_id || 0,
     experiment_id: event.experiment_id,
     tags: event.tags.map(t => t.name),
     recurrence_rule: event.recurrence_rule,
@@ -1378,6 +1413,7 @@ const submitEventWithScope = async (modifySeries) => {
   const payload = {
     title: formEvent.value.title,
     description: formEvent.value.description,
+    group_id: formEvent.value.group_id,
     experiment_id: formEvent.value.experiment_id,
     start_date: startDateTimeStr,
     end_date: endDateTimeStr,
@@ -3156,5 +3192,16 @@ const getTagColorClass = (name) => {
   background: #dbeafe !important;
   border-color: #bfdbfe !important;
   color: #1d4ed8 !important;
+}
+
+/* Group badge on event cards */
+.group-badge {
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  color: #15803d;
+  font-weight: 600;
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 4px;
 }
 </style>

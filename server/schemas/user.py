@@ -11,6 +11,8 @@ class GroupResponse(BaseModel):
     id: int
     name: str
     description: Optional[str] = None
+    is_private: bool = False
+    owner_id: Optional[int] = None
 
     class Config:
         from_attributes = True  # 允许兼容 SQLAlchemy 模型
@@ -63,6 +65,8 @@ class UserCreate(BaseModel):
 class GroupMinResponse(BaseModel):
     id: int
     name: str
+    is_private: bool = False
+    owner_id: Optional[int] = None
     
     class Config:
         from_attributes = True

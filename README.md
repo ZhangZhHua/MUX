@@ -10,9 +10,9 @@
 git clone https://github.com/ZhangZhHua/MUX.git && cd MUX && ./deploy.sh
 ```
 
-That's it. Open `http://localhost:18080`, register — the first account becomes admin.
+Open `http://localhost:18080`, register — the first account becomes **admin**.
 
-> Set `APP_PORT=8080` in `.env.prod` to change the port.
+> Set `APP_PORT=8080` in `.env.prod` to customize the port.
 
 ## Features
 
@@ -35,22 +35,6 @@ That's it. Open `http://localhost:18080`, register — the first account becomes
 | Database | PostgreSQL 15 |
 | Auth | JWT + bcrypt |
 | Deploy | Docker Compose + Nginx |
-
-## Development
-
-```bash
-# Start PostgreSQL
-docker compose up -d
-
-# Backend (terminal 1)
-cd server && python3 -m venv venv && source venv/bin/activate
-pip install -r requirements.txt && uvicorn main:app --reload
-# → http://127.0.0.1:8000/docs
-
-# Frontend (terminal 2)
-cd client && npm install && npm run dev
-# → http://localhost:5173
-```
 
 ## Environment Variables
 

@@ -1,95 +1,51 @@
-# MUX Lab Log System
+# MUX Lab Log
 
-> Collaborative research management for physics laboratories — experiments, shift logs, scheduling, and team coordination.
+物理学实验室协作平台 — 实验管理、值班日志、日程安排、团队协作。
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+## 部署
 
-## Prerequisites
-
-- **Docker** ≥ 20.10 & **Docker Compose** ≥ v2
-- Linux / macOS / Windows (WSL2)
-- 2 GB free RAM, 5 GB disk space
-
-## Quick Deploy
+需要 **Docker**。
 
 ```bash
 git clone https://github.com/ZhangZhHua/MUX.git && cd MUX && ./deploy.sh
 ```
 
-Open `http://localhost:18080`, register — the first account becomes **admin**.
+访问 `http://localhost:18080`，注册 → 第一个账号即管理员。
 
-## Server Deployment
+---
 
-Same as above — run `./deploy.sh` on your server. Then:
-
-### Option A: Reverse proxy (recommended)
-
-```nginx
-server {
-    listen 80;
-    server_name your-domain.com;
-    location / {
-        proxy_pass http://127.0.0.1:18080;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        client_max_body_size 50M;
-    }
-}
-```
-
-### Option B: Direct port exposure
-
-Set `APP_PORT=80` in `.env.prod` before running `./deploy.sh`, then access via `http://your-server-ip`.
-
-### Firewall
+### 部署到服务器
 
 ```bash
-# If using firewall
-sudo ufw allow 18080/tcp    # or 80/tcp
+git clone https://github.com/ZhangZhHua/MUX.git && cd MUX
+# 编辑 .env.prod：改 DB_PASSWORD，设 APP_PORT=80
+./deploy.sh
 ```
 
-## Configuration
+如需域名，Nginx 反代到 `127.0.0.1:18080` 即可。
 
-Edit `.env.prod` (auto-generated on first `./deploy.sh`)：
+### 配置
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `APP_PORT` | `18080` | External HTTP port |
-| `DB_USER` | `lab_user` | PostgreSQL user |
-| `DB_PASSWORD` | — | PostgreSQL password **(change this!)** |
-| `DB_NAME` | `lab_logs` | Database name |
-| `SECRET_KEY` | auto-generated | JWT signing key |
+`.env.prod` 首次运行自动生成，可修改：
 
-## Features
+| 变量 | 默认 | 说明 |
+|------|------|------|
+| `APP_PORT` | `18080` | 对外端口 |
+| `DB_PASSWORD` | — | **必须修改** |
+| `SECRET_KEY` | 自动生成 | JWT 密钥 |
 
-- **Experiments** — CRUD with tags, status (running/paused/stopped), Markdown docs
-- **Daily Shift Logs** — Kanban by date, multi-attachment, clipboard image paste (Ctrl+V)
-- **Lab Events** — Weekly calendar, recurring events, participant tracking, comments
-- **Team Management** — Research groups, role-based access, member profiles
-- **Private Workspaces** — Each user gets a `[Private]` group invisible to others
-- **Recycle Bin** — Soft-delete experiments; admins restore or permanently destroy
-- **Registration Approval** — Optional admin-approval workflow for new accounts
-- **Dark Mode** — Light / Dark / System theme, English / Chinese i18n
-- **Session Timeout** — Configurable idle detection with auto-logout
+## 功能
 
-## Tech Stack
+实验管理 · 值班日志看板 · 周日程 · 团队管理 · 私人工作区 · 回收站 · 暗色模式 · 中英文 · 会话超时
 
-| Layer | Technology |
-|-------|-----------|
-| Frontend | Vue 3, Vue Router 5, Axios, Vite 8 |
-| Backend | FastAPI, SQLAlchemy ORM, Pydantic v2 |
-| Database | PostgreSQL 15 |
-| Auth | JWT + bcrypt |
-| Deploy | Docker Compose + Nginx |
+## 技术栈
 
-## Roles
+Vue 3 + FastAPI + PostgreSQL 15 + Docker
 
-| Role | Capabilities |
-|------|-------------|
-| `member` | View experiments/logs/events; edit own logs; toggle step completion |
-| `team_admin` | Create/delete experiments in their groups; manage members; approve registrations |
-| `sys_admin` | Full access; create groups; system settings; permanent delete; all approvals |
+## 角色
 
-## License
-
-MIT
+| 角色 | 权限 |
+|------|------|
+| `member` | 查看实验/日志/日程，编辑自己的日志 |
+| `team_admin` | 管理组内实验和成员，审批注册 |
+| `sys_admin` | 全部权限：建组、系统设置、永久删除 |

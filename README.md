@@ -4,6 +4,12 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
+## Prerequisites
+
+- **Docker** ≥ 20.10 & **Docker Compose** ≥ v2
+- Linux / macOS / Windows (WSL2)
+- 2 GB free RAM, 5 GB disk space
+
 ## Quick Deploy
 
 ```bash
@@ -12,7 +18,47 @@ git clone https://github.com/ZhangZhHua/MUX.git && cd MUX && ./deploy.sh
 
 Open `http://localhost:18080`, register — the first account becomes **admin**.
 
-> Set `APP_PORT=8080` in `.env.prod` to customize the port.
+## Server Deployment
+
+Same as above — run `./deploy.sh` on your server. Then:
+
+### Option A: Reverse proxy (recommended)
+
+```nginx
+server {
+    listen 80;
+    server_name your-domain.com;
+    location / {
+        proxy_pass http://127.0.0.1:18080;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        client_max_body_size 50M;
+    }
+}
+```
+
+### Option B: Direct port exposure
+
+Set `APP_PORT=80` in `.env.prod` before running `./deploy.sh`, then access via `http://your-server-ip`.
+
+### Firewall
+
+```bash
+# If using firewall
+sudo ufw allow 18080/tcp    # or 80/tcp
+```
+
+## Configuration
+
+Edit `.env.prod` (auto-generated on first `./deploy.sh`)：
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `APP_PORT` | `18080` | External HTTP port |
+| `DB_USER` | `lab_user` | PostgreSQL user |
+| `DB_PASSWORD` | — | PostgreSQL password **(change this!)** |
+| `DB_NAME` | `lab_logs` | Database name |
+| `SECRET_KEY` | auto-generated | JWT signing key |
 
 ## Features
 
@@ -35,16 +81,6 @@ Open `http://localhost:18080`, register — the first account becomes **admin**.
 | Database | PostgreSQL 15 |
 | Auth | JWT + bcrypt |
 | Deploy | Docker Compose + Nginx |
-
-## Environment Variables
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `APP_PORT` | `18080` | External HTTP port |
-| `DB_USER` | `lab_user` | PostgreSQL user |
-| `DB_PASSWORD` | — | PostgreSQL password |
-| `DB_NAME` | `lab_logs` | Database name |
-| `SECRET_KEY` | — | JWT signing key (`openssl rand -hex 32`) |
 
 ## Roles
 

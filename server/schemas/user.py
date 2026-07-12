@@ -84,7 +84,9 @@ class UserResponse(BaseModel):
     
     # 🆕 新增字段
     avatar_node: Optional[str] = None  # 头像图片流占位符
-    homepage_url: Optional[str] = None # 个人主页跳转预留
+    homepage_url: Optional[str] = None
+    status: Optional[str] = "active"
+    last_active_at: Optional[datetime] = None # 个人主页跳转预留
     
     # 🆕 核心升级：级联带出该用户在数据库里绑定的所有团队，完美解决“资料页显示隶属团队”的需求
     groups: List[GroupMinResponse] = []

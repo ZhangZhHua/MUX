@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Text, ForeignKey, Table, Boolean
+from sqlalchemy import Column, Integer, String, Text, ForeignKey, Table, Boolean, DateTime
 from sqlalchemy.orm import relationship
 from config.database import Base
 
@@ -27,6 +27,8 @@ class User(Base):
     academic_bio = Column(Text, nullable=True)       # 学术简介 / 研究方向
     avatar_node = Column(String, nullable=True)
     homepage_url = Column(String, nullable=True)
+    status = Column(String, default="active", nullable=False)  # active / pending / rejected
+    last_active_at = Column(DateTime, nullable=True)
     
     groups = relationship("Group", secondary=group_users_association, back_populates="members")
     owned_groups = relationship("Group", back_populates="owner", foreign_keys="Group.owner_id")

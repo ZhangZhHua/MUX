@@ -9,6 +9,7 @@ from schemas.intelligence import SystemSettingUpdate, SystemSettingResponse
 from utils.security import get_password_hash, verify_password, create_access_token, decode_access_token
 from fastapi.security import  OAuth2PasswordRequestForm # <- 确保引入了这个
 from typing import List
+from datetime import datetime, timedelta
 
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
@@ -33,6 +34,8 @@ def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(
     user = db.query(User).filter(User.email == email).first()
     if user is None:
         raise credentials_exception
+    user.last_active_at = datetime.utcnow()
+    db.commit()
     return user
 
 
@@ -48,13 +51,19 @@ def register_user(user_data: UserCreate, db: Session = Depends(get_db)):
 
     hashed_pwd = get_password_hash(user_data.password)
     
-    # 🆕 实例化时存入用户的姓和名
+    # Check if registration requires approval
+    require_approval_setting = db.query(SystemSetting).filter(SystemSetting.key == "require_approval").first()
+    require_approval = require_approval_setting and require_approval_setting.value.lower() == "true"
+    user_status = "pending" if require_approval else "active"
+    
+    # 实例化时存入用户的姓和名
     new_user = User(
         email=user_data.email,
         hashed_password=hashed_pwd,
         first_name=user_data.first_name,
         last_name=user_data.last_name,
-        role=assigned_role
+        role=assigned_role,
+        status=user_status
     )
 
     if user_data.group_ids:
@@ -94,6 +103,16 @@ def login(login_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depen
     
     if not user or not verify_password(login_data.password, user.hashed_password):
         raise HTTPException(status_code=400, detail="Incorrect email or password")
+    
+    # Check pending/rejected status
+    if user.status == "pending":
+        raise HTTPException(status_code=403, detail="Your account is pending admin approval.")
+    if user.status == "rejected":
+        raise HTTPException(status_code=403, detail="Your account registration has been rejected.")
+    
+    # Update last active
+    user.last_active_at = datetime.utcnow()
+    db.commit()
     
     access_token = create_access_token(data={"sub": user.email})
     
@@ -401,7 +420,12 @@ def get_system_setting(key: str, db: Session = Depends(get_db)):
     setting = db.query(SystemSetting).filter(SystemSetting.key == key).first()
     if not setting:
         # 默认值
-        default_val = "For technical support or issues, please contact the administrator at admin@physics-lab.org."
+        defaults = {
+            "help_info": "For technical support or issues, please contact the administrator at admin@physics-lab.org.",
+            "session_timeout": "120",
+            "require_approval": "false",
+        }
+        default_val = defaults.get(key, "")
         setting = SystemSetting(key=key, value=default_val)
         db.add(setting)
         db.commit()
@@ -428,3 +452,63 @@ def update_system_setting(
     db.commit()
     db.refresh(setting)
     return setting
+    return setting
+
+
+# --- User Approval & Session Management ---
+
+@router.get("/users/pending")
+def get_pending_users(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    if current_user.role not in ["sys_admin", "team_admin"]:
+        raise HTTPException(status_code=403, detail="Permission denied.")
+    if current_user.role == "sys_admin":
+        users = db.query(User).filter(User.status == "pending").all()
+    else:
+        user_group_ids = [g.id for g in current_user.groups]
+        all_pending = db.query(User).filter(User.status == "pending").all()
+        users = [u for u in all_pending if any(g.id in user_group_ids for g in u.groups)]
+    return [UserResponse.from_orm(u) for u in users]
+
+
+@router.put("/users/{user_id}/approve")
+def approve_user(user_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    if current_user.role not in ["sys_admin", "team_admin"]:
+        raise HTTPException(status_code=403, detail="Permission denied.")
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found.")
+    if user.status != "pending":
+        raise HTTPException(status_code=400, detail="User is not in pending status.")
+    user.status = "active"
+    db.commit()
+    return {"status": "success", "message": f"User {user.email} approved."}
+
+
+@router.put("/users/{user_id}/reject")
+def reject_user(user_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    if current_user.role not in ["sys_admin", "team_admin"]:
+        raise HTTPException(status_code=403, detail="Permission denied.")
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found.")
+    if user.status != "pending":
+        raise HTTPException(status_code=400, detail="User is not in pending status.")
+    user.status = "rejected"
+    db.commit()
+    return {"status": "success", "message": f"User {user.email} rejected."}
+
+
+@router.get("/users/session-status")
+def check_session_status(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    timeout_str = db.query(SystemSetting).filter(SystemSetting.key == "session_timeout").first()
+    timeout_minutes = int(timeout_str.value) if timeout_str else 120
+    now = datetime.utcnow()
+    is_timed_out = False
+    if current_user.last_active_at:
+        elapsed = (now - current_user.last_active_at).total_seconds() / 60
+        is_timed_out = elapsed > timeout_minutes
+    return {
+        "session_timeout_minutes": timeout_minutes,
+        "last_active_at": current_user.last_active_at.isoformat() if current_user.last_active_at else None,
+        "is_timed_out": is_timed_out
+    }

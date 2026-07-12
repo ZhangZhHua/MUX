@@ -50,3 +50,342 @@ html, body {
   text-align: left !important;
   overflow: hidden;
 }
+/* =================== Dark Mode =================== */
+html.dark {
+  --bg-primary: #0f172a;
+  --bg-surface: #1e293b;
+  --text-main: #f1f5f9;
+  --text-muted: #94a3b8;
+  --border-color: #334155;
+  --primary-color: #3b82f6;
+  --primary-hover: #60a5fa;
+  --accent-bg: rgba(170, 59, 255, 0.15);
+  --accent-border: rgba(170, 59, 255, 0.4);
+}
+
+html.dark input, html.dark textarea, html.dark select {
+  background-color: #1e293b !important;
+  color: #f1f5f9 !important;
+  border-color: #475569 !important;
+}
+
+html.dark .global-header,
+html.dark .global-sidebar,
+html.dark .modal-box,
+html.dark .experiment-card,
+html.dark .event-card,
+html.dark .trash-item,
+html.dark .content-block {
+  background-color: var(--bg-surface) !important;
+  border-color: var(--border-color) !important;
+}
+
+html.dark .modal-backdrop {
+  background: rgba(0, 0, 0, 0.6) !important;
+}
+
+/* ============ Dark Mode - Comprehensive Overrides ============ */
+
+/* Header & Sidebar */
+html.dark .global-header { background: #1a2332 !important; border-bottom-color: #2a3a4e !important; }
+html.dark .global-header input,
+html.dark .global-header button { color: #e2e8f0 !important; }
+html.dark .global-header .search-wrapper input { background: #0f1a28 !important; border-color: #334155 !important; color: #94a3b8 !important; }
+html.dark .global-header .btn-logout { color: #f87171 !important; }
+html.dark .global-header .role-badge { background: #1e3a5f !important; color: #93c5fd !important; }
+html.dark .global-sidebar { background: #1a2332 !important; border-right-color: #2a3a4e !important; }
+html.dark .global-sidebar .nav-item { color: #94a3b8 !important; }
+html.dark .global-sidebar .nav-item:hover { background: #243447 !important; color: #e2e8f0 !important; }
+html.dark .global-sidebar .nav-item.active { background: #1e3a5f !important; color: #60a5fa !important; }
+html.dark .sidebar-label { color: #64748b !important; }
+html.dark .telemetry-clocks-panel { background: #0f1a28 !important; border-color: #2a3a4e !important; }
+html.dark .clock-label { color: #64748b !important; }
+html.dark .clock-time { color: #e2e8f0 !important; }
+
+/* Dashboard tags & status pills */
+html.dark .tag-pill { background: #1e293b !important; color: #94a3b8 !important; border-color: #334155 !important; }
+html.dark .tag-pill.active { background: var(--primary-color) !important; color: #fff !important; }
+html.dark .status-pill { background: #1e293b !important; color: #94a3b8 !important; border-color: #334155 !important; }
+html.dark .hash-tag { background: #1e3a5f !important; color: #93c5fd !important; }
+html.dark .filter-row-label { color: #94a3b8 !important; }
+html.dark .welcome-banner { color: var(--text-main) !important; }
+html.dark .welcome-banner h2 { color: var(--text-main) !important; }
+html.dark .welcome-banner p { color: var(--text-muted) !important; }
+
+/* Dashboard cards */
+html.dark .experiment-card { background: #1e293b !important; border-color: #334155 !important; }
+html.dark .experiment-card:hover { box-shadow: 0 4px 12px rgba(0,0,0,0.3) !important; }
+html.dark .exp-title { color: var(--text-main) !important; }
+html.dark .exp-summary { color: #94a3b8 !important; }
+html.dark .team-owner-badge { background: #1e3a5f !important; color: #93c5fd !important; }
+html.dark .divider-dot { color: #475569 !important; }
+html.dark .time-node-row { color: #64748b !important; }
+
+/* Dashboard right panels */
+html.dark .intelligence-card,
+html.dark .alert-board-panel,
+html.dark .activity-timeline-panel,
+html.dark .help-support-panel { background: #1e293b !important; border-color: #334155 !important; }
+html.dark .intel-header h3 { color: var(--text-main) !important; }
+html.dark .notice-node { background: #0f1a28 !important; border-color: #334155 !important; }
+html.dark .notice-body-text { color: #cbd5e1 !important; }
+html.dark .notice-meta-line { color: #64748b !important; }
+html.dark .timeline-item .time { color: #64748b !important; }
+html.dark .timeline-item .desc { color: #cbd5e1 !important; }
+html.dark .operator-name { color: #e2e8f0 !important; }
+html.dark .help-info-content { color: #94a3b8 !important; }
+html.dark .notice-quick-post-anchor textarea { background: #0f1a28 !important; color: #e2e8f0 !important; border-color: #334155 !important; }
+html.dark .system-broadcast-red { background: #3b1111 !important; border-color: #581c1c !important; }
+html.dark .team-broadcast-orange { background: #2d1f0e !important; border-color: #4a3310 !important; }
+html.dark .badge-tag.system { background: #581c1c !important; color: #fca5a5 !important; }
+html.dark .badge-tag.team { background: #4a3310 !important; color: #fcd34d !important; }
+
+/* Team Members */
+html.dark .member-profile-card { background: #1e293b !important; border-color: #334155 !important; }
+html.dark .member-profile-card:hover { box-shadow: 0 4px 16px rgba(0,0,0,0.3) !important; }
+html.dark .member-fullname { color: var(--text-main) !important; }
+html.dark .meta-line { color: #94a3b8 !important; }
+html.dark .meta-line .email-text { color: #60a5fa !important; }
+html.dark .card-footer-bio { color: #64748b !important; background: #0f1a28 !important; }
+html.dark .card-top-decorator.sys_admin { background: #7c3aed !important; }
+html.dark .card-top-decorator.team_admin { background: #2563eb !important; }
+html.dark .card-top-decorator.member { background: #10b981 !important; }
+html.dark .role-indicator-badge { background: #1e3a5f !important; color: #93c5fd !important; }
+html.dark .role-indicator-badge.sys_admin { background: #3b1f6e !important; color: #c4b5fd !important; }
+html.dark .role-indicator-badge.team_admin { background: #1e3a5f !important; color: #93c5fd !important; }
+html.dark .team-view-banner h2 { color: var(--text-main) !important; }
+html.dark .team-view-banner p { color: var(--text-muted) !important; }
+html.dark .group-scope-badge { background: #1e3a5f !important; color: #93c5fd !important; }
+html.dark .team-container-box { background: transparent !important; }
+
+/* Team Members profile modal */
+html.dark .profile-center-modal { background: #1e293b !important; }
+html.dark .profile-mini-sidebar { background: #0f1a28 !important; border-color: #334155 !important; }
+html.dark .profile-mini-sidebar h4 { color: var(--text-main) !important; }
+html.dark .profile-mini-sidebar .institution-sub { color: #64748b !important; }
+html.dark .profile-stage-header h3 { color: var(--text-main) !important; }
+html.dark .profile-form-group label { color: #94a3b8 !important; }
+html.dark .profile-tab-menu .tab-menu-item { color: #94a3b8 !important; }
+html.dark .profile-tab-menu .tab-menu-item.active { background: #1e3a5f !important; color: #60a5fa !important; }
+
+/* Lab Events */
+html.dark .timeline-header-bar h2 { color: var(--text-main) !important; }
+html.dark .timeline-day-section { background: #1e293b !important; border-color: #334155 !important; }
+html.dark .timeline-day-section.is-today { border-color: var(--accent) !important; background: linear-gradient(180deg, rgba(170,59,255,0.08) 0%, rgba(30,41,59,0.6) 100%) !important; }
+html.dark .day-name { color: var(--text-main) !important; }
+html.dark .day-date { color: #94a3b8 !important; }
+html.dark .event-card { background: #0f1a28 !important; border-color: #334155 !important; }
+html.dark .event-card:hover { box-shadow: 0 4px 12px rgba(0,0,0,0.3) !important; }
+html.dark .event-title { color: var(--text-main) !important; }
+html.dark .event-description { color: #cbd5e1 !important; }
+html.dark .event-author-row { color: #94a3b8 !important; }
+html.dark .author-name { color: #cbd5e1 !important; }
+html.dark .calendar-widget-card { background: #1e293b !important; border-color: #334155 !important; }
+html.dark .important-events-card { background: #1e293b !important; border-color: #334155 !important; }
+html.dark .item-title { color: var(--text-main) !important; }
+html.dark .btn-nav-week { background: #1e293b !important; border-color: #334155 !important; color: #e2e8f0 !important; }
+
+/* Experiment Detail */
+html.dark .detail-main { background: var(--bg-primary) !important; }
+html.dark .exp-meta-bar { background: #1e293b !important; border-bottom-color: #334155 !important; }
+html.dark .exp-meta-bar h2 { color: var(--text-main) !important; }
+html.dark .block-title { color: var(--text-main) !important; }
+html.dark .content-block { background: #1e293b !important; border-color: #334155 !important; }
+html.dark .bg-notification-board { background: #2d1f0e !important; border-color: #4a3310 !important; }
+html.dark .bg-kanban-track { background: #1e293b !important; }
+html.dark .kanban-column { background: #0f1a28 !important; border-color: #334155 !important; }
+html.dark .col-header h4 { color: var(--text-main) !important; }
+html.dark .log-card { background: #1e293b !important; border-color: #334155 !important; }
+html.dark .log-card:hover { box-shadow: 0 2px 8px rgba(0,0,0,0.3) !important; }
+html.dark .log-text { color: #cbd5e1 !important; }
+html.dark .log-card-meta { color: #64748b !important; }
+html.dark .logger-name { color: #94a3b8 !important; }
+html.dark .task-display-content { color: var(--text-main) !important; }
+html.dark .utility-dock { background: #1e293b !important; border-color: #334155 !important; }
+html.dark .panel-title-row h3 { color: var(--text-main) !important; }
+html.dark .stat-tree-node { color: #cbd5e1 !important; }
+html.dark .attachments-scroller-box { background: #0f1a28 !important; }
+html.dark .attach-file-row { color: #94a3b8 !important; }
+html.dark .btn-back { background: #1e293b !important; color: #94a3b8 !important; border-color: #334155 !important; }
+html.dark .kanban-tip { color: #64748b !important; }
+html.dark .collapse-hint-text { color: #64748b !important; }
+
+/* Buttons */
+html.dark .btn-record-log,
+html.dark .btn-edit-meta,
+html.dark .btn-toggle-mode,
+html.dark .btn-expand-trigger,
+html.dark .btn-clear-ghost,
+html.dark .btn-tag-round { background: #1e293b !important; color: #94a3b8 !important; border-color: #334155 !important; }
+html.dark .btn-record-log:hover,
+html.dark .btn-edit-meta:hover { background: #243447 !important; color: #e2e8f0 !important; }
+html.dark .task-edit-actions textarea { background: #0f1a28 !important; color: #e2e8f0 !important; border-color: #334155 !important; }
+html.dark .markdown-view-wrapper { color: #cbd5e1 !important; }
+html.dark .markdown-view-wrapper h1,
+html.dark .markdown-view-wrapper h2,
+html.dark .markdown-view-wrapper h3,
+html.dark .markdown-view-wrapper h4 { color: #e2e8f0 !important; }
+html.dark .markdown-view-wrapper code { background: #0f1a28 !important; color: #e2e8f0 !important; }
+html.dark .markdown-view-wrapper pre { background: #0f1a28 !important; border-color: #334155 !important; }
+html.dark .static-textarea { background: #0f1a28 !important; color: #e2e8f0 !important; border-color: #334155 !important; }
+html.dark .format-select { background: #0f1a28 !important; color: #e2e8f0 !important; border-color: #334155 !important; }
+html.dark .form-input-date-filter { background: #0f1a28 !important; color: #e2e8f0 !important; border-color: #334155 !important; }
+
+/* Modal forms */
+html.dark .modal-form-group label { color: #94a3b8 !important; }
+html.dark .modal-subtitle { color: #64748b !important; }
+html.dark .form-file-chip { background: #0f1a28 !important; color: #94a3b8 !important; border-color: #334155 !important; }
+html.dark .matrix-item { color: #cbd5e1 !important; }
+html.dark .info-tooltip-content { background: #e2e8f0 !important; color: #0f172a !important; }
+html.dark .file-uploader-box { background: #0f1a28 !important; border-color: #334155 !important; }
+
+/* General layout */
+html.dark .workspace-container { background: var(--bg-primary) !important; }
+html.dark .workspace-left { background: var(--bg-primary) !important; }
+html.dark .workspace-right { background: var(--bg-primary) !important; }
+html.dark .empty-notices-fallback { color: #64748b !important; }
+html.dark .empty-state p { color: #64748b !important; }
+html.dark .pulse-red-dot { background: #ef4444 !important; }
+
+/* Settings page */
+html.dark .settings-card { background: #1e293b !important; border-color: #334155 !important; }
+html.dark .settings-card h3 { color: var(--text-main) !important; }
+html.dark .theme-option { background: #1e293b !important; border-color: #334155 !important; color: #94a3b8 !important; }
+html.dark .toggle-label { color: #94a3b8 !important; }
+html.dark .timeout-label { color: #64748b !important; }
+html.dark .btn-save-sm { background: var(--primary-color) !important; }
+
+/* ============ Dark Mode - Remaining Fixes ============ */
+
+/* Account Profile Settings Modal */
+html.dark .profile-center-modal { background: #1e293b !important; }
+html.dark .profile-main-form-stage { background: #1e293b !important; }
+html.dark .profile-stage-header h3 { color: var(--text-main) !important; }
+html.dark .profile-render-form input,
+html.dark .profile-render-form textarea,
+html.dark .profile-render-form select { background: #0f1a28 !important; color: #e2e8f0 !important; border-color: #334155 !important; }
+html.dark .profile-render-form label { color: #94a3b8 !important; }
+html.dark .input-disabled { background: #0f1a28 !important; color: #64748b !important; border-color: #334155 !important; }
+html.dark .sidebar-role-tag { background: #1e3a5f !important; color: #93c5fd !important; }
+html.dark .security-alert-box { background: #0f1a28 !important; border-color: #334155 !important; }
+html.dark .security-alert-box p { color: #93c5fd !important; }
+html.dark .profile-tab-menu .tab-menu-item { color: #94a3b8 !important; }
+html.dark .profile-tab-menu .tab-menu-item:hover { background: #243447 !important; }
+html.dark .profile-tab-menu .tab-menu-item.active { background: #1e3a5f !important; color: #60a5fa !important; }
+html.dark .btn-profile-cancel { background: transparent !important; color: #94a3b8 !important; border-color: #334155 !important; }
+html.dark .btn-profile-submit { background: var(--primary-color) !important; color: #fff !important; }
+html.dark .profile-huge-avatar { background: #0f1a28 !important; border-color: #334155 !important; }
+html.dark .header-avatar-fit { border-color: #475569 !important; }
+html.dark .user-name-text { color: #e2e8f0 !important; }
+html.dark .btn-logout { color: #f87171 !important; }
+
+/* Events page: Weekly Schedule header */
+html.dark .view-pill { background: #1e3a5f !important; color: #93c5fd !important; }
+html.dark .timeline-header-bar h2 { color: var(--text-main) !important; }
+html.dark .btn-create-event { background: linear-gradient(135deg, #7c3aed, #6d28d9) !important; }
+
+/* Calendar date numbers */
+html.dark .calendar-day-num { color: #e2e8f0 !important; }
+html.dark .calendar-cell.inactive .calendar-day-num { color: #475569 !important; }
+html.dark .calendar-cell.today .calendar-day-num { color: #fbbf24 !important; font-weight: 800; }
+html.dark .calendar-cell.has-events { border-color: var(--accent) !important; }
+html.dark .calendar-cell { background: transparent !important; }
+html.dark .calendar-cell:hover { background: #243447 !important; }
+html.dark .calendar-cell.is-active-week { background: #1e3a5f !important; }
+html.dark .calendar-cell.is-selected { background: var(--primary-color) !important; color: #fff !important; }
+html.dark .calendar-cell.is-selected .calendar-day-num { color: #fff !important; }
+html.dark .calendar-month-header span { color: var(--text-main) !important; }
+html.dark .calendar-weekday { color: #64748b !important; }
+html.dark .datepicker-input { background: #1e293b !important; color: #e2e8f0 !important; border-color: #334155 !important; }
+html.dark .btn-quick-nav { background: #0f1a28 !important; border-color: #334155 !important; color: #94a3b8 !important; }
+html.dark .btn-quick-nav:hover { background: #243447 !important; color: #e2e8f0 !important; }
+
+/* Event tags & badges */
+html.dark .event-tag-badge { background: #1e3a5f !important; color: #93c5fd !important; }
+html.dark .badge-meeting { background: #1e3a5f !important; color: #93c5fd !important; }
+html.dark .badge-experiment { background: #14532d !important; color: #86efac !important; }
+html.dark .badge-debug { background: #4a3310 !important; color: #fcd34d !important; }
+html.dark .badge-milestone { background: #3b1111 !important; color: #fca5a5 !important; }
+html.dark .badge-default { background: #1e293b !important; color: #94a3b8 !important; }
+html.dark .important-chip { background: #3b1111 !important; color: #fca5a5 !important; border-color: #581c1c !important; }
+html.dark .recurrence-badge { background: #1e1150 !important; border-color: #382080 !important; color: #c4b5fd !important; }
+html.dark .exp-link-badge { background: #0f1a28 !important; color: #93c5fd !important; }
+html.dark .group-badge { background: #14532d !important; border-color: #1a6b3a !important; color: #86efac !important; }
+html.dark .today-badge { background: #fbbf24 !important; color: #1a1a00 !important; }
+html.dark .time-range-label { background: #0f1a28 !important; color: #94a3b8 !important; }
+html.dark .participant-badge { background: #1e293b !important; color: #94a3b8 !important; }
+
+/* Event buttons */
+html.dark .card-edit-button { background: #1e293b !important; border-color: #334155 !important; color: #94a3b8 !important; }
+html.dark .card-edit-button:hover { background: #243447 !important; color: #e2e8f0 !important; border-color: #475569 !important; }
+html.dark .btn-day-add-event { background: #1e3a5f !important; border-color: #1e4a7a !important; color: #93c5fd !important; }
+html.dark .btn-day-add-event:hover { background: #1e4a7a !important; }
+html.dark .btn-toggle-comments { color: #94a3b8 !important; }
+html.dark .btn-toggle-comments:hover { background: #243447 !important; color: #e2e8f0 !important; }
+html.dark .btn-today { background: #1e293b !important; border-color: #334155 !important; color: #94a3b8 !important; }
+
+/* Event comments */
+html.dark .event-comments-drawer { background: #0f1a28 !important; border-color: #334155 !important; }
+html.dark .comment-input-field { background: #1e293b !important; color: #e2e8f0 !important; border-color: #334155 !important; }
+html.dark .comment-text { color: #cbd5e1 !important; }
+html.dark .comment-meta { color: #64748b !important; }
+html.dark .comment-author { color: #94a3b8 !important; }
+
+/* All text inputs globally (deep) */
+html.dark input:not([type="checkbox"]):not([type="radio"]):not([type="file"]),
+html.dark textarea {
+  background: #0f1a28 !important;
+  color: #e2e8f0 !important;
+  border-color: #334155 !important;
+}
+html.dark input::placeholder,
+html.dark textarea::placeholder { color: #64748b !important; }
+
+/* All select dropdowns */
+html.dark select:not(.modern-team-selector) {
+  background: #0f1a28 !important;
+  color: #e2e8f0 !important;
+  border-color: #334155 !important;
+}
+
+/* Calendar selectors (month/year) */
+html.dark .calendar-select { color: var(--text-main) !important; }
+html.dark .calendar-select:hover { background: #243447 !important; }
+
+/* Widget subtitles and datepicker */
+html.dark .widget-subtitle { color: #94a3b8 !important; }
+html.dark .empty-important-state { color: #64748b !important; }
+html.dark .item-date-badge { color: #64748b !important; }
+html.dark .mini-tag { background: #1e293b !important; color: #94a3b8 !important; }
+
+/* Experiment Detail specific */
+html.dark .btn-cancel-inline { background: #1e293b !important; color: #94a3b8 !important; border-color: #334155 !important; }
+html.dark .btn-save-inline { background: var(--primary-color) !important; color: #fff !important; }
+html.dark .btn-read-more { color: #60a5fa !important; }
+html.dark .btn-add-log-inline { background: #1e3a5f !important; color: #93c5fd !important; }
+html.dark .btn-add-first-log { color: #94a3b8 !important; border-color: #334155 !important; }
+html.dark .btn-export-pdf { background: #1e293b !important; color: #94a3b8 !important; border-color: #334155 !important; }
+html.dark .btn-delete-meta { color: #f87171 !important; }
+html.dark .log-participants { color: #64748b !important; }
+html.dark .kanban-filter-control span { color: #94a3b8 !important; }
+
+/* Status indicators */
+html.dark .status-indicator.running { background: #14532d !important; color: #86efac !important; }
+html.dark .status-indicator.paused { background: #4a3310 !important; color: #fcd34d !important; }
+html.dark .status-indicator.stopped { background: #3b1111 !important; color: #fca5a5 !important; }
+html.dark .status-indicator.archived { background: #1e293b !important; color: #94a3b8 !important; }
+html.dark .status-badge.running { background: #14532d !important; color: #86efac !important; }
+html.dark .status-badge.paused { background: #4a3310 !important; color: #fcd34d !important; }
+html.dark .status-badge.stopped { background: #3b1111 !important; color: #fca5a5 !important; }
+html.dark .status-badge.archived { background: #1e293b !important; color: #94a3b8 !important; }
+
+/* toast */
+html.dark .toast-item { background: #1e293b !important; color: #e2e8f0 !important; border-color: #334155 !important; }
+html.dark .toast-item.success { border-left-color: #10b981 !important; }
+html.dark .toast-item.error { border-left-color: #ef4444 !important; }
+html.dark .toast-item.info { border-left-color: #3b82f6 !important; }
+
+/* confirm dialog */
+html.dark .confirm-dialog-box { background: #1e293b !important; }
+html.dark .confirm-dialog-box h3 { color: var(--text-main) !important; }
+html.dark .confirm-dialog-box p { color: #94a3b8 !important; }

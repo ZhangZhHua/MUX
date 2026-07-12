@@ -82,7 +82,7 @@ const toast = useToast();
 
 const fetchGroups = async () => {
   try {
-    const response = await api.get('/auth/groups');
+    const response = await api.get('/auth/public-groups');
     availableGroups.value = response.data;
   } catch (error) {
     console.error('Failed to fetch groups:', error);

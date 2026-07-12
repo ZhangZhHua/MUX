@@ -164,10 +164,6 @@ def create_group(group_data: GroupCreate, db: Session = Depends(get_db)):
     db.refresh(new_group)
     return new_group
 
-@router.get("/groups", response_model=List[GroupResponse])
-def get_all_groups(db: Session = Depends(get_db)):
-    """获取系统中所有已创建的实验团队列表"""
-    return db.query(Group).all()
 
 
 # 🆕 1. 获取当前登录科学家的完整最新档案
@@ -512,3 +508,10 @@ def check_session_status(db: Session = Depends(get_db), current_user: User = Dep
         "last_active_at": current_user.last_active_at.isoformat() if current_user.last_active_at else None,
         "is_timed_out": is_timed_out
     }
+
+# --- 公开 Group 列表（注册页调用，无需登录） ---
+@router.get("/public-groups", response_model=List[GroupResponse])
+def get_public_groups(db: Session = Depends(get_db)):
+    """返回所有非私有的 Group，供注册页面展示"""
+    groups = db.query(Group).filter(Group.is_private == False).order_by(Group.name.asc()).all()
+    return groups

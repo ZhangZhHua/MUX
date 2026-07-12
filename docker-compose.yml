@@ -1,0 +1,17 @@
+# Development compose: PostgreSQL only — run frontend/backend locally
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: mux_dev_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${DB_USER:-lab_user}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-lab_password_2026}
+      POSTGRES_DB: ${DB_NAME:-lab_logs}
+    ports:
+      - "5432:5432"
+    volumes:
+      - pg_dev_data:/var/lib/postgresql/data
+
+volumes:
+  pg_dev_data:

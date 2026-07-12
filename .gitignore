@@ -1,17 +1,33 @@
+# Dependencies
 node_modules/
 __pycache__/
 *.pyc
-venv/
-dist/
+server/venv/
+
+# Build output
+client/dist/
+
+# Environment secrets (templates are committed)
 .env
-.*
+.env.prod
+.env.production
+
+# OS
+.DS_Store
+._*
+Thumbs.db
+
+# Logs & temporary
 *.log
 chat.txt
-*.yml
+walkthrough.log
+
+# Uploads (user-generated content)
 server/uploads/
-.env.production
-.env.prod
-.DS_Store
-docker-compose.prod.yml
-docker-compose.yml
-DEPLOY.md
+
+# IDE
+.vscode/
+.idea/
+
+# Docker volumes
+postgres_prod_data/

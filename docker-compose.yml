@@ -1,7 +1,6 @@
 services:
   mux-db:
     image: postgres:15-alpine
-    container_name: mux_postgres
     restart: always
     environment:
       POSTGRES_USER: ${DB_USER}
@@ -16,7 +15,6 @@ services:
     build:
       context: ./server
       dockerfile: Dockerfile
-    container_name: mux_backend
     restart: always
     depends_on:
       - mux-db
@@ -33,14 +31,12 @@ services:
     build:
       context: ./client
       dockerfile: Dockerfile
-    container_name: mux_frontend
     restart: always
     expose:
       - "80"
 
   mux-nginx:
     image: nginx:stable-alpine
-    container_name: mux_gateway
     restart: always
     ports:
       - "${APP_PORT:-18080}:80"

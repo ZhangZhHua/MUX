@@ -14,18 +14,10 @@ fi
 find . -name "._*" -delete 2>/dev/null
 docker compose --env-file .env.prod up -d --build
 
-# Get the project name (defaults to directory name)
-PROJ=$(basename "$PWD" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9]//g')
-BACKEND="${PROJ}-mux-backend-1"
-GATEWAY="${PROJ}-mux-nginx-1"
-
-sleep 3
-for script in migrate_event_group.py migrate_soft_delete.py migrate_private_groups.py migrate_user_status.py; do
-  docker exec "$BACKEND" python $script 2>/dev/null || true
-done
-docker restart "$GATEWAY" 2>/dev/null || true
+sleep 5
+echo ""
+echo "  MUX Lab Log is running"
+echo "  First to register becomes admin"
 
 PORT=$(grep APP_PORT .env.prod 2>/dev/null | cut -d= -f2 | tr -d ' ' || echo "18080")
-echo ""
-echo "  MUX Lab Log running → http://localhost:${PORT:-18080}"
-echo "  First to register becomes admin"
+echo "  http://localhost:${PORT:-18080}"

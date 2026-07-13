@@ -1,50 +1,59 @@
 services:
   mux-db:
     image: postgres:15-alpine
+    container_name: mux-db
     restart: always
     environment:
-      POSTGRES_USER: ${DB_USER}
-      POSTGRES_PASSWORD: ${DB_PASSWORD}
-      POSTGRES_DB: ${DB_NAME}
+      POSTGRES_USER: ${DB_USER:-mux_prod_admin}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-mux_lab_password_2026}
+      POSTGRES_DB: ${DB_NAME:-mux_lab_logs}
     volumes:
       - postgres_prod_data:/var/lib/postgresql/data
-    expose:
-      - "5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    stop_grace_period: 60s
 
-  mux-backend:
+  mux-app:
     build:
-      context: ./server
+      context: .
       dockerfile: Dockerfile
+      args:
+        HTTP_PROXY: ${BUILD_HTTP_PROXY:-}
+        HTTPS_PROXY: ${BUILD_HTTPS_PROXY:-}
+        NO_PROXY: ${BUILD_NO_PROXY:-localhost,127.0.0.1,mux-db}
+    container_name: mux-app
     restart: always
     depends_on:
-      - mux-db
-    environment:
-      - DATABASE_URL=postgresql://${DB_USER}:${DB_PASSWORD}@mux-db:5432/${DB_NAME}
-      - SECRET_KEY=${SECRET_KEY}
-      - ACCESS_TOKEN_EXPIRE_MINUTES=${ACCESS_TOKEN_EXPIRE_MINUTES:-1440}
-    volumes:
-      - ./server/uploads:/app/uploads
-    expose:
-      - "8000"
-
-  mux-frontend:
-    build:
-      context: ./client
-      dockerfile: Dockerfile
-    restart: always
-    expose:
-      - "80"
-
-  mux-nginx:
-    image: nginx:stable-alpine
-    restart: always
+      mux-db:
+        condition: service_healthy
+        restart: true
     ports:
       - "${APP_PORT:-18080}:80"
-    depends_on:
-      - mux-backend
-      - mux-frontend
+    environment:
+      DB_HOST: mux-db
+      DB_PORT: "5432"
+      DB_USER: ${DB_USER:-mux_prod_admin}
+      DB_PASSWORD: ${DB_PASSWORD:-mux_lab_password_2026}
+      DB_NAME: ${DB_NAME:-mux_lab_logs}
+      SECRET_KEY: ${SECRET_KEY:-change-me-in-production}
+      ACCESS_TOKEN_EXPIRE_MINUTES: ${ACCESS_TOKEN_EXPIRE_MINUTES:-1440}
+      BACKUP_DIR: /backups
     volumes:
-      - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./server/uploads:/app/uploads
+      - ./backups:/backups
+    healthcheck:
+      test: ["CMD-SHELL", "curl --fail --silent http://127.0.0.1:8000/ >/dev/null && curl --fail --silent http://127.0.0.1/ >/dev/null"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
 
 volumes:
   postgres_prod_data:
+    # Fixed name deliberately reuses the database volume from the previous
+    # four-container deployment instead of creating an empty project-scoped one.
+    name: ${DB_VOLUME_NAME:-physics-lab-log_postgres_prod_data}

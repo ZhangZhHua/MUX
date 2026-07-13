@@ -40,7 +40,7 @@
 
 <script setup>
 import { ref } from 'vue';
-import { useRouter } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 import api from '../services/api';
 import { useToast } from '../composables/useToast';
 import MuxLogo from '../components/common/MuxLogo.vue';
@@ -48,7 +48,15 @@ import MuxLogo from '../components/common/MuxLogo.vue';
 const email = ref('');
 const password = ref('');
 const router = useRouter();
+const route = useRoute();
 const toast = useToast();
+
+const getSafeRedirectPath = () => {
+  const redirect = route.query.redirect;
+  return typeof redirect === 'string' && redirect.startsWith('/') && !redirect.startsWith('//')
+    ? redirect
+    : '/';
+};
 
 const handleLogin = async () => {
   try {
@@ -64,7 +72,7 @@ const handleLogin = async () => {
     localStorage.setItem('userId', response.data.user_id);
     
     toast.success("Welcome back!");
-    router.push('/');
+    router.replace(getSafeRedirectPath());
   } catch (error) {
     toast.error(error.response?.data?.detail || 'Login failed. Check your credentials.');
   }

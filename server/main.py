@@ -8,7 +8,8 @@ from routers import auth, experiment # 🆕 引入实验路由
 import models.daily_log as log_model # 🆕 1. 引入日志模型
 import models.intelligence as intel_model # 🆕 引入安全审计与系统设置模型
 import models.event as event_model # 🆕 引入周日程与大事记模型
-from routers import auth, experiment, daily_log, event
+from routers import auth, experiment, daily_log, event, backup
+from config.scheduler import start_scheduler, shutdown_scheduler
 
 # 自动创建数据库表
 Base.metadata.create_all(bind=engine)
@@ -29,6 +30,17 @@ app.include_router(auth.router, prefix="/api")
 app.include_router(experiment.router, prefix="/api")
 app.include_router(daily_log.router, prefix="/api")
 app.include_router(event.router, prefix="/api")
+app.include_router(backup.router, prefix="/api")
+
+# Start backup scheduler on app startup
+@app.on_event("startup")
+def startup_event():
+    start_scheduler()
+
+@app.on_event("shutdown")
+def shutdown_event():
+    shutdown_scheduler()
+
 @app.get("/")
 def read_root():
     return {"message": "Lab Log System API is online."}

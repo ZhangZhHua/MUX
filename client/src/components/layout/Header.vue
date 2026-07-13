@@ -10,15 +10,81 @@
     </div>
 
     <div class="header-center">
-      <div class="search-wrapper">
+      <div class="search-wrapper" :class="{ 'search-active': searchQuery.length > 0 }">
         <span class="search-icon">🔍</span>
-        <input type="text" placeholder="Search experiments or tags (e.g., #DarkMatter)..." disabled />
+        <input
+          type="text"
+          v-model="searchQuery"
+          placeholder="Search experiments, events, or people..."
+          @input="onSearchInput"
+          @focus="openSearchResults"
+          @keydown.escape="closeSearch"
+        />
+        <span v-if="searchLoading" class="search-spinner">⏳</span>
+        <span v-if="searchQuery && !searchLoading" class="search-clear" @click="clearSearch">✕</span>
+      </div>
+      <!-- Search Results Dropdown -->
+      <div class="search-dropdown" v-if="showSearchResults && searchQuery.length > 0" @mousedown.prevent>
+        <div v-if="searchLoading" class="search-status">Searching...</div>
+        <template v-else>
+          <div v-if="searchError" class="search-status search-error">{{ searchError }}</div>
+          <!-- Experiments Section -->
+          <div v-if="!searchError && searchResults.experiments && searchResults.experiments.length > 0" class="search-section">
+            <div class="search-section-header">🔬 Experiments</div>
+            <div
+              v-for="exp in searchResults.experiments"
+              :key="'exp-'+exp.id"
+              class="search-result-item"
+              @click="navigateToExperiment(exp.id)"
+            >
+              <span class="search-item-icon">🔬</span>
+              <div class="search-item-info">
+                <span class="search-item-title">{{ exp.title }}</span>
+                <span class="search-item-meta">{{ exp.group_name }} · {{ exp.status }}</span>
+              </div>
+            </div>
+          </div>
+          <!-- Events Section -->
+          <div v-if="!searchError && searchResults.events && searchResults.events.length > 0" class="search-section">
+            <div class="search-section-header">📅 Lab Events</div>
+            <div
+              v-for="evt in searchResults.events"
+              :key="'evt-'+evt.id"
+              class="search-result-item"
+              @click="navigateToEvent(evt.id)"
+            >
+              <span class="search-item-icon">📅</span>
+              <div class="search-item-info">
+                <span class="search-item-title">{{ evt.title }}</span>
+                <span class="search-item-meta">{{ evt.group_name }} · {{ formatSearchDate(evt.start_date) }}</span>
+              </div>
+            </div>
+          </div>
+          <!-- Users Section -->
+          <div v-if="!searchError && searchResults.users && searchResults.users.length > 0" class="search-section">
+            <div class="search-section-header">👥 People</div>
+            <div
+              v-for="user in searchResults.users"
+              :key="'user-'+user.id"
+              class="search-result-item"
+              @click="navigateToUser(user.id)"
+            >
+              <span class="search-item-icon">👤</span>
+              <div class="search-item-info">
+                <span class="search-item-title">{{ user.first_name }} {{ user.last_name }}</span>
+                <span class="search-item-meta">{{ user.institution || user.email }}</span>
+              </div>
+            </div>
+          </div>
+          <!-- No Results -->
+          <div v-if="!searchError && !hasSearchResults" class="search-status">No results found for "{{ searchQuery }}"</div>
+        </template>
       </div>
     </div>
 
     <div class="header-right">
       <span class="role-badge">{{ userRole }}</span>
-      
+
       <div class="user-profile-trigger" @click="openProfileModal" title="Click to view & edit your account profile">
         <img v-if="currentUserAvatar" :src="getAvatarUrl(currentUserAvatar)" class="header-avatar-fit" />
         <span v-else class="user-avatar-avatar">👤</span>
@@ -31,7 +97,7 @@
     <Teleport to="body">
       <div class="modal-backdrop" v-if="showProfileModal" @mousedown.self="mouseDownTarget = $event.target" @mouseup.self="mouseDownTarget === $event.currentTarget && closeProfileModal()">
         <div class="modal-box profile-center-modal">
-          
+
           <div class="profile-modal-layout">
             <div class="profile-mini-sidebar">
               <div class="card-avatar-area">
@@ -44,20 +110,20 @@
                       <span class="hover-text">Upload</span>
                     </div>
                   </div>
-                  
-                  <input 
-                    type="file" 
-                    ref="avatarFileSelector" 
-                    style="display: none" 
-                    accept="image/png, image/jpeg, image/jpg" 
-                    @change="handleAvatarFileChange" 
+
+                  <input
+                    type="file"
+                    ref="avatarFileSelector"
+                    style="display: none"
+                    accept="image/png, image/jpeg, image/jpg"
+                    @change="handleAvatarFileChange"
                   />
                 </div>
                 <h4>{{ profileForm.first_name }} {{ profileForm.last_name }}</h4>
                 <p class="institution-sub">{{ profileForm.institution || 'No Institution Linked' }}</p>
                 <span class="sidebar-role-tag">{{ userRole.toUpperCase() }}</span>
               </div>
-              
+
               <div class="profile-tab-menu">
                 <button class="tab-menu-item" :class="{ active: activeTab === 'profile' }" @click="activeTab = 'profile'">
                   👤 Personal Profile
@@ -151,7 +217,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue';
+import { ref, shallowRef, computed, onMounted, onBeforeUnmount } from 'vue';
 import { useRouter } from 'vue-router';
 import api from '../../services/api';
 import MuxLogo from '../common/MuxLogo.vue';
@@ -162,9 +228,100 @@ const props = defineProps({
   userRole: { type: String, default: 'member' }
 });
 
-const emit = defineEmits(['logout']);
+const emit = defineEmits(['logout', 'toggle-sidebar']);
 const router = useRouter();
 const toast = useToast();
+
+// --- Search State ---
+const searchQuery = shallowRef('');
+const searchResults = shallowRef({ experiments: [], events: [], users: [] });
+const showSearchResults = shallowRef(false);
+const searchLoading = shallowRef(false);
+const searchError = shallowRef('');
+let searchDebounceTimer = null;
+let latestSearchId = 0;
+
+const hasSearchResults = computed(() => {
+  return (searchResults.value.experiments?.length || 0) +
+         (searchResults.value.events?.length || 0) +
+         (searchResults.value.users?.length || 0) > 0;
+});
+
+const onSearchInput = () => {
+  if (searchDebounceTimer) clearTimeout(searchDebounceTimer);
+  const q = searchQuery.value.trim();
+  const searchId = ++latestSearchId;
+  searchError.value = '';
+  if (q.length < 2) {
+    searchResults.value = { experiments: [], events: [], users: [] };
+    showSearchResults.value = false;
+    searchLoading.value = false;
+    return;
+  }
+  showSearchResults.value = true;
+  searchLoading.value = true;
+  searchDebounceTimer = setTimeout(() => performSearch(q, searchId), 300);
+};
+
+const performSearch = async (q, searchId) => {
+  searchError.value = '';
+  try {
+    const res = await api.get('/experiments/search', { params: { q } });
+    if (searchId !== latestSearchId) return;
+    searchResults.value = res.data;
+    showSearchResults.value = true;
+  } catch (e) {
+    if (searchId !== latestSearchId) return;
+    searchResults.value = { experiments: [], events: [], users: [] };
+    searchError.value = 'Search failed. Please try again.';
+    showSearchResults.value = true;
+  } finally {
+    if (searchId === latestSearchId) searchLoading.value = false;
+  }
+};
+
+const openSearchResults = () => {
+  if (searchQuery.value.trim().length >= 2) {
+    showSearchResults.value = true;
+  }
+};
+
+const clearSearch = () => {
+  if (searchDebounceTimer) clearTimeout(searchDebounceTimer);
+  latestSearchId += 1;
+  searchQuery.value = '';
+  searchResults.value = { experiments: [], events: [], users: [] };
+  searchError.value = '';
+  searchLoading.value = false;
+  showSearchResults.value = false;
+};
+
+const closeSearch = () => {
+  showSearchResults.value = false;
+};
+
+const navigateToExperiment = (id) => {
+  closeSearch();
+  router.push(`/experiment/${id}`);
+};
+
+const navigateToEvent = (id) => {
+  closeSearch();
+  router.push('/events');
+  // We can't directly jump to a specific event on the events page easily,
+  // but at least take the user to the events page
+};
+
+const navigateToUser = (id) => {
+  closeSearch();
+  router.push('/team-members');
+};
+
+const formatSearchDate = (dateStr) => {
+  if (!dateStr) return '';
+  const d = new Date(dateStr);
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+};
 
 const showProfileModal = ref(false);
 const activeTab = ref('profile'); // profile | security
@@ -194,7 +351,16 @@ const profileForm = ref({
   academic_bio: ''
 });
 
+// Close search dropdown when clicking outside
+const handleClickOutside = (e) => {
+  const searchEl = document.querySelector('.header-center');
+  if (searchEl && !searchEl.contains(e.target)) {
+    showSearchResults.value = false;
+  }
+};
+
 onMounted(async () => {
+  document.addEventListener('click', handleClickOutside);
   // Active fetch: try to load full profile from server to get avatar + name
   try {
     const response = await api.get('/auth/me');
@@ -213,12 +379,17 @@ onMounted(async () => {
   }
 });
 
+onBeforeUnmount(() => {
+  if (searchDebounceTimer) clearTimeout(searchDebounceTimer);
+  document.removeEventListener('click', handleClickOutside);
+});
+
 // Open profile modal and fetch latest data from server
 const openProfileModal = async () => {
   try {
     const response = await api.get('/auth/me');
     const u = response.data;
-    
+
     userEmail.value = u.email;
     profileForm.value.first_name = u.first_name;
     profileForm.value.last_name = u.last_name;
@@ -226,7 +397,7 @@ const openProfileModal = async () => {
     profileForm.value.institution = u.institution || '';
     profileForm.value.country_region = u.country_region || '';
     profileForm.value.academic_bio = u.academic_bio || '';
-    
+
     // Sync display name
     currentFullName.value = `${u.first_name} ${u.last_name}`;
 
@@ -237,7 +408,7 @@ const openProfileModal = async () => {
     } else {
       localStorage.removeItem('userAvatar');
     }
-    
+
     activeTab.value = 'profile';
     showProfileModal.value = true;
   } catch (error) {
@@ -265,16 +436,16 @@ const handleSaveProfile = async () => {
       country_region: profileForm.value.country_region || null,
       academic_bio: profileForm.value.academic_bio || null
     });
-    
+
     const updatedUser = response.data;
     currentFullName.value = `${updatedUser.first_name} ${updatedUser.last_name}`;
-    
+
     // Sync local name cache
     localStorage.setItem('userName', currentFullName.value);
-    
+
     toast.success("Account profile node database synchronized!");
     showProfileModal.value = false;
-    
+
     window.location.reload();
   } catch (error) {
     toast.error("Failed to commit profile updates.");
@@ -303,9 +474,9 @@ const handleAvatarFileChange = async (event) => {
   // Phase 1: upload binary to /experiments/upload
   const formData = new FormData();
   formData.append('file', file);
-  
+
   toast.info("Uploading your new academic avatar...");
-  
+
   try {
     const uploadRes = await api.post('/experiments/upload', formData, {
       headers: { 'Content-Type': 'multipart/form-data' }
@@ -321,7 +492,7 @@ const handleAvatarFileChange = async (event) => {
     currentUserAvatar.value = serverFileName;
     localStorage.setItem('userAvatar', serverFileName);
     toast.success("Academic avatar reconfigured smoothly!");
-    
+
     window.location.reload();
   } catch (error) {
     toast.error("Failed to commit avatar to server node.");
@@ -347,13 +518,14 @@ const getAvatarUrl = (node) => `${api.defaults.baseURL}/experiments/attachments/
 
 .header-center { width: 400px; }
 .search-wrapper {
-  display: flex; align-items: center; gap: 8px; background: #f1f5f9;
-  border: 1px solid #e2e8f0; border-radius: 6px; padding: 6px 12px; width: 100%; box-sizing: border-box;
+  display: flex; align-items: center; gap: 8px; background: var(--bg-primary);
+  border: 1px solid var(--border-color); border-radius: 6px; padding: 6px 12px; width: 100%; box-sizing: border-box;
 }
-.search-icon { font-size: 13px; color: #94a3b8; }
+.search-icon { font-size: 13px; color: var(--text-muted); }
 .search-wrapper input {
-  background: transparent; border: none; outline: none; width: 100%; font-size: 13px; color: #334155; cursor: not-allowed;
+  background: transparent; border: none; outline: none; width: 100%; font-size: 13px; color: var(--text-main); cursor: not-allowed;
 }
+.search-wrapper input::placeholder { color: var(--text-muted); opacity: 1; }
 
 .header-right { display: flex; align-items: center; gap: 16px; }
 .role-badge { font-size: 11px; font-weight: 600; background: #eff6ff; color: #2563eb; padding: 2px 8px; border-radius: 4px; border: 1px solid #bfdbfe; text-transform: lowercase; }
@@ -382,20 +554,20 @@ const getAvatarUrl = (node) => `${api.defaults.baseURL}/experiments/attachments/
   overflow: hidden;
   border-radius: 14px !important;
 }
-.profile-modal-layout { 
-  display: flex; 
+.profile-modal-layout {
+  display: flex;
   height: 100%;
 }
 
 /* Left sidebar */
 .profile-mini-sidebar {
-  width: 240px; 
-  background: #f8fafc; 
+  width: 240px;
+  background: #f8fafc;
   border-right: 1px solid #e2e8f0;
-  padding: 32px 20px; 
-  box-sizing: border-box; 
-  display: flex; 
-  flex-direction: column; 
+  padding: 32px 20px;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
   gap: 28px;
   height: 100%;
 }
@@ -424,20 +596,20 @@ const getAvatarUrl = (node) => `${api.defaults.baseURL}/experiments/attachments/
 .btn-close-profile-x:hover { color: #1e293b; }
 
 .profile-main-form-stage {
-  flex: 1; 
-  padding: 32px; 
-  box-sizing: border-box; 
-  display: flex; 
-  flex-direction: column; 
+  flex: 1;
+  padding: 32px;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
   background: #ffffff;
   height: 100%;
   overflow-y: auto;
 }
 
-.profile-render-form { 
-  display: flex; 
-  flex-direction: column; 
-  gap: 16px; 
+.profile-render-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
   text-align: left;
   flex: 1;
 }
@@ -580,7 +752,7 @@ const getAvatarUrl = (node) => `${api.defaults.baseURL}/experiments/attachments/
   .global-header {
     padding: 0 16px;
   }
-  
+
   /* Make the profile trigger modal more responsive */
   .profile-center-modal {
     width: 92% !important;
@@ -606,4 +778,54 @@ const getAvatarUrl = (node) => `${api.defaults.baseURL}/experiments/attachments/
     display: flex !important;
   }
 }
+
+/* Search dropdown styles */
+.header-center { position: relative; }
+.search-wrapper { position: relative; }
+.search-wrapper.search-active { border-color: var(--primary-color); box-shadow: 0 0 0 2px rgba(37,99,235,0.1); }
+.search-wrapper input { cursor: text !important; }
+.search-spinner { font-size: 13px; animation: spin 1s linear infinite; }
+.search-clear { font-size: 14px; color: var(--text-muted); cursor: pointer; padding: 2px 4px; border-radius: 3px; }
+.search-clear:hover { background: var(--border-color); color: var(--text-main); }
+
+.search-dropdown {
+  position: absolute;
+  top: 42px;
+  left: 0;
+  right: 0;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  box-shadow: 0 10px 25px rgba(15,23,42,0.12);
+  max-height: 420px;
+  overflow-y: auto;
+  z-index: var(--z-overlay);
+}
+.search-section { padding: 6px 0; }
+.search-section + .search-section { border-top: 1px solid var(--border-color); }
+.search-section-header {
+  padding: 8px 16px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.search-result-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px;
+  cursor: pointer;
+  transition: background 0.12s;
+}
+.search-result-item:hover { background: var(--bg-primary); }
+.search-item-icon { font-size: 15px; flex-shrink: 0; }
+.search-item-info { display: flex; flex-direction: column; min-width: 0; }
+.search-item-title { font-size: 13.5px; font-weight: 600; color: var(--text-main); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.search-item-meta { font-size: 11.5px; color: var(--text-muted); margin-top: 1px; }
+.search-status { padding: 20px; text-align: center; font-size: 13px; color: var(--text-muted); }
+.search-error { color: #dc2626; }
+
+@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
 </style>

@@ -16,6 +16,9 @@
           <button class="tab-btn" :class="{ active: activeTab === 'trash' }" @click="activeTab = 'trash'" v-if="isAdmin">
             🗑️ {{ t('settings.recycleBin') }} <span v-if="trashCount > 0" class="trash-count-badge">{{ trashCount }}</span>
           </button>
+          <button class="tab-btn" :class="{ active: activeTab === 'backup' }" @click="activeTab = 'backup'" v-if="userRole === 'sys_admin'">
+            💾 Backup & Restore
+          </button>
         </div>
 
         <!-- ===== General Settings Tab ===== -->
@@ -107,6 +110,9 @@
           </div>
         </div>
 
+        <!-- ===== Backup & Restore Tab ===== -->
+        <BackupRestorePanel v-if="activeTab === 'backup' && userRole === 'sys_admin'" />
+
         <!-- Permanent Delete Confirmation -->
         <Teleport to="body">
           <div class="modal-backdrop" v-if="showPermanentDeleteModal" @mousedown.self="mouseDownTarget = $event.target" @mouseup.self="mouseDownTarget === $event.currentTarget && closePermanentDeleteModal()">
@@ -127,6 +133,7 @@ import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import Header from '../components/layout/Header.vue'
 import Sidebar from '../components/layout/Sidebar.vue'
+import BackupRestorePanel from '../components/settings/BackupRestorePanel.vue'
 import api from '../services/api'
 import { useToast } from '../composables/useToast'
 import { useTheme } from '../composables/useTheme'
@@ -223,6 +230,7 @@ const executePermanentDelete = async () => { if (!deletingExperiment.value) retu
 
 const formatDate = (d) => d ? new Date(d).toLocaleDateString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }) : 'Unknown'
 const handleGroupChange = (gid) => { currentGroupId.value = gid; localStorage.setItem('activeGroupId', gid) }
+
 const handleLogout = () => { localStorage.clear(); router.push('/login') }
 </script>
 

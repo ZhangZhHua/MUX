@@ -1749,8 +1749,8 @@ const getTagColorClass = (name) => {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  background: #ffffff !important;
-  border: 1px solid var(--border);
+  background: var(--bg-surface) !important;
+  border: 1px solid var(--border-color);
   padding: 16px 24px;
   border-radius: 16px;
   box-shadow: var(--shadow);
@@ -1775,7 +1775,7 @@ const getTagColorClass = (name) => {
   font-size: 20px;
   margin: 6px 0 0 0;
   font-weight: 700;
-  color: var(--text-h);
+  color: var(--text-main);
 }
 
 .header-actions {

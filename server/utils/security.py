@@ -1,12 +1,14 @@
 import bcrypt
+import os
 from datetime import datetime, timedelta
 from typing import Optional
 from jose import jwt, JWTError
 
-# 生产环境中这些应该放入 .env 环境变量中
-SECRET_KEY = "physics_lab_secret_key_2026_secure" 
+# Production values are supplied by docker-compose; local development keeps a
+# deterministic fallback so existing developer sessions continue to work.
+SECRET_KEY = os.getenv("SECRET_KEY", "physics_lab_secret_key_2026_secure")
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24  # 令牌有效期一天
+ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "1440"))
 
 def get_password_hash(password: str) -> str:
     pwd_bytes = password.encode('utf-8')

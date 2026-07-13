@@ -30,7 +30,7 @@ router.beforeEach((to, from) => {
   const token = localStorage.getItem('token');
   
   if (to.meta.requiresAuth && !token) {
-    return '/login'; // 直接返回目标路径，Vue Router 会自动拦截并重定向
+    return { path: '/login', query: { redirect: to.fullPath } };
   }
   
   // 🆕 当从其他页面（通过 Sidebar 等）切换到 /events 时，清除缓存的查看日期使之默认展示今天。

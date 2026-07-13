@@ -31,3 +31,6 @@ server/uploads/
 
 # Docker volumes
 postgres_prod_data/
+
+# Database backups (keep outside Git; mounted into mux-app)
+backups/

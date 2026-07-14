@@ -34,3 +34,4 @@ postgres_prod_data/
 
 # Database backups (keep outside Git; mounted into mux-app)
 backups/
+skills-lock.json

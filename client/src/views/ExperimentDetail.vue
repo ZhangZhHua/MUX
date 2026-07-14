@@ -28,7 +28,7 @@
             @click="handleExportPdf"
             :title="isExporting ? '正在生成 PDF...' : '导出实验全部信息为 PDF 文件'"
           >
-            {{ isExporting ? '⏳ Generating PDF...' : '📄 Export PDF' }}
+            {{ isExporting ? `⏳ ${exportStatus || 'Generating PDF...'}` : '📄 Export PDF' }}
           </button>
           <template v-if="userRole !== 'member'">
             <button class="btn-edit-meta" @click="openEditMetaModal">⚙️ Edit Experiment Info</button>
@@ -739,7 +739,7 @@ const router = useRouter();
 const route = useRoute();
 const toast = useToast();
 const { confirm } = useConfirmDialog();
-const { isExporting, exportToPdf } = usePdfExport();
+const { isExporting, exportStatus, exportToPdf } = usePdfExport();
 
 const userName = ref('');
 const userRole = ref('');
@@ -1633,14 +1633,10 @@ const handleExportPdf = async () => {
   if (!experiment.value) return;
   
   try {
-    // 构建 Markdown 编译后的 HTML（针对 PDF 内联样式版本）
-    const descHtml = editFormatType.value === 'markdown'
-      ? compileMarkdown(editDescription.value)
-      : `<pre style="white-space: pre-wrap; font-family: monospace; font-size: 13px; line-height: 1.6; color: #334155;">${editDescription.value || 'No document description recorded.'}</pre>`;
-
     await exportToPdf({
       experiment: experiment.value,
-      descriptionHtml: descHtml,
+      descriptionText: editDescription.value,
+      descriptionFormat: editFormatType.value,
       bulletins: bulletins.value,
       steps: stepsList.value,
       groupedLogColumns: groupedColumns.value, // 已经按日期倒序

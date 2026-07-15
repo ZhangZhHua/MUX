@@ -1,0 +1,34 @@
+<svg width="360" height="96" viewBox="0 0 360 96" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title description">
+  <title id="title">MUX Lab Data OS</title>
+  <desc id="description">Three data paths converge on a cyan signal point beside the MUX wordmark.</desc>
+
+  <defs>
+    <linearGradient id="mux-track" x1="12" y1="48" x2="72" y2="48" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#312E81" stop-opacity="0.45"/>
+      <stop offset="0.52" stop-color="#6366F1"/>
+      <stop offset="1" stop-color="#22D3EE"/>
+    </linearGradient>
+    <linearGradient id="mux-wordmark" x1="104" y1="20" x2="242" y2="72" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#22D3EE"/>
+      <stop offset="0.5" stop-color="#5EEAD4"/>
+      <stop offset="1" stop-color="#818CF8"/>
+    </linearGradient>
+    <radialGradient id="mux-glow" cx="0" cy="0" r="1" gradientTransform="translate(72 48) rotate(90) scale(22)" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#22D3EE" stop-opacity="0.45"/>
+      <stop offset="1" stop-color="#22D3EE" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <circle cx="72" cy="48" r="22" fill="url(#mux-glow)"/>
+  <g stroke="url(#mux-track)" stroke-width="6" stroke-linecap="round">
+    <path d="M12 20C36 20 48 48 72 48"/>
+    <path d="M12 48H72"/>
+    <path d="M12 76C36 76 48 48 72 48"/>
+  </g>
+  <circle cx="72" cy="48" r="10" fill="#22D3EE"/>
+  <circle cx="72" cy="48" r="4" fill="white"/>
+
+  <line x1="100" y1="18" x2="100" y2="78" stroke="#CBD5E1" stroke-opacity="0.6"/>
+  <text x="120" y="57" fill="url(#mux-wordmark)" font-family="Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="48" font-weight="900" letter-spacing="3">MUX</text>
+  <text x="122" y="77" fill="#64748B" font-family="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace" font-size="12" font-weight="600" letter-spacing="4">LAB DATA OS</text>
+</svg>

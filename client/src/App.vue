@@ -39,13 +39,13 @@ const resetIdleTimer = () => {
   countdown.value = WARNING_SECONDS
   if (countdownTimer) clearInterval(countdownTimer)
   // Update last_active on server
-  if (localStorage.getItem('token')) {
+  if (sessionStorage.getItem('authenticated')) {
     api.get('/auth/me').catch(() => {})
   }
 }
 
 const checkIdle = async () => {
-  if (!localStorage.getItem('token')) return
+  if (!sessionStorage.getItem('authenticated')) return
   
   const elapsed = (Date.now() - lastActivity) / 60000 // minutes
   
@@ -77,6 +77,8 @@ const checkIdle = async () => {
 }
 
 const forceLogout = () => {
+  api.post('/auth/logout').catch(() => {})
+  sessionStorage.removeItem('authenticated')
   localStorage.clear()
   if (countdownTimer) clearInterval(countdownTimer)
   if (idleTimer) clearInterval(idleTimer)

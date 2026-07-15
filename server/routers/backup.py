@@ -8,10 +8,11 @@ Database Backup & Restore Router
 import os
 import subprocess
 import glob
+import tempfile
 from datetime import datetime, timedelta
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from config.database import get_db
+from config.database import SessionLocal, get_db
 from models.user import User
 from models.intelligence import SystemSetting
 from routers.auth import get_current_user
@@ -20,13 +21,19 @@ router = APIRouter(prefix="/backup", tags=["Backup"])
 
 BACKUP_DIR = os.environ.get("BACKUP_DIR", "/backups")
 
+def _backup_key() -> str:
+    key = os.environ.get("BACKUP_ENCRYPTION_KEY")
+    if not key or key.startswith("change-me-"):
+        raise RuntimeError("BACKUP_ENCRYPTION_KEY must be configured before backups can run.")
+    return key
+
 def _ensure_backup_dir():
     if not os.path.exists(BACKUP_DIR):
         os.makedirs(BACKUP_DIR, exist_ok=True)
 
 def _get_db_url_parts() -> dict:
     """Parse DATABASE_URL env var into connection parts for pg_dump/psql."""
-    db_url = os.environ.get("DATABASE_URL", "postgresql://lab_user:lab_password_2026@localhost:5432/lab_logs")
+    db_url = os.environ.get("BACKUP_DATABASE_URL") or os.environ["DATABASE_URL"]
     # Format: postgresql://user:password@host:port/dbname
     url = db_url.replace("postgresql://", "")
     # Split user:password@host:port/dbname
@@ -43,19 +50,23 @@ def _get_db_url_parts() -> dict:
     }
 
 def _run_pg_dump(output_path: str) -> bool:
-    """Run pg_dumpall to backup the database. Returns True on success."""
+    """Dump only the application database using the restricted backup role."""
     parts = _get_db_url_parts()
     env = os.environ.copy()
     env["PGPASSWORD"] = parts["password"]
     
     try:
-        with open(output_path, "w") as f:
+        with tempfile.NamedTemporaryFile("w", suffix=".sql", delete=False) as f:
+            plain_path = f.name
             result = subprocess.run(
                 [
-                    "pg_dumpall",
+                    "pg_dump",
                     "-h", parts["host"],
                     "-p", parts["port"],
                     "-U", parts["user"],
+                    "-d", parts["dbname"],
+                    "--no-owner",
+                    "--no-privileges",
                     "--no-password",
                 ],
                 stdout=f,
@@ -63,44 +74,25 @@ def _run_pg_dump(output_path: str) -> bool:
                 env=env,
                 timeout=600  # 10 minutes timeout
             )
-        return result.returncode == 0
+        if result.returncode != 0:
+            return False
+        encrypted = subprocess.run(
+            ["openssl", "enc", "-aes-256-cbc", "-pbkdf2", "-salt", "-pass", f"pass:{_backup_key()}", "-in", plain_path, "-out", output_path],
+            stderr=subprocess.PIPE, timeout=600
+        )
+        return encrypted.returncode == 0
     except Exception as e:
         print(f"Backup failed: {e}")
         return False
-
-def _run_psql_restore(backup_path: str) -> bool:
-    """Run psql to restore from a backup file. Returns True on success."""
-    parts = _get_db_url_parts()
-    env = os.environ.copy()
-    env["PGPASSWORD"] = parts["password"]
-    
-    try:
-        with open(backup_path, "r") as f:
-            result = subprocess.run(
-                [
-                    "psql",
-                    "-h", parts["host"],
-                    "-p", parts["port"],
-                    "-U", parts["user"],
-                    "-d", parts["dbname"],
-                    "--no-password",
-                ],
-                stdin=f,
-                stderr=subprocess.PIPE,
-                env=env,
-                timeout=600
-            )
-        return result.returncode == 0
-    except Exception as e:
-        print(f"Restore failed: {e}")
-        return False
-
+    finally:
+        if 'plain_path' in locals() and os.path.exists(plain_path):
+            os.remove(plain_path)
 
 def create_backup() -> str:
     """Create a backup file. Returns the filename on success, raises on failure."""
     _ensure_backup_dir()
     timestamp = datetime.now().strftime("%Y-%m-%d_%H%M%S")
-    filename = f"mux_backup_{timestamp}.sql"
+    filename = f"mux_backup_{timestamp}.sql.enc"
     filepath = os.path.join(BACKUP_DIR, filename)
     
     success = _run_pg_dump(filepath)
@@ -108,7 +100,7 @@ def create_backup() -> str:
         # Clean up failed file
         if os.path.exists(filepath):
             os.remove(filepath)
-        raise RuntimeError("pg_dumpall failed. Check database connectivity.")
+        raise RuntimeError("pg_dump failed. Check backup-role database access.")
     
     # Get file size
     size_bytes = os.path.getsize(filepath)
@@ -122,9 +114,14 @@ def create_backup() -> str:
 def _cleanup_old_backups():
     """Remove backups older than the retention period."""
     _ensure_backup_dir()
-    retention_days = 7  # Default
+    db = SessionLocal()
+    try:
+        setting = db.query(SystemSetting).filter(SystemSetting.key == "backup_retention_days").first()
+        retention_days = max(1, min(int(setting.value) if setting else 7, 3650))
+    finally:
+        db.close()
     
-    files = glob.glob(os.path.join(BACKUP_DIR, "mux_backup_*.sql"))
+    files = glob.glob(os.path.join(BACKUP_DIR, "mux_backup_*.sql.enc"))
     cutoff = datetime.now() - timedelta(days=retention_days)
     
     for fpath in files:
@@ -169,7 +166,7 @@ def list_backups(
         raise HTTPException(status_code=403, detail="Only System Admin can view backups.")
     
     _ensure_backup_dir()
-    files = glob.glob(os.path.join(BACKUP_DIR, "mux_backup_*.sql"))
+    files = glob.glob(os.path.join(BACKUP_DIR, "mux_backup_*.sql.enc"))
     backups = []
     for fpath in sorted(files, reverse=True):
         stat = os.stat(fpath)
@@ -193,23 +190,13 @@ def restore_backup(
     if current_user.role != "sys_admin":
         raise HTTPException(status_code=403, detail="Only System Admin can restore backups.")
     
-    # Sanitize filename
-    if ".." in filename or "/" in filename:
-        raise HTTPException(status_code=400, detail="Invalid backup filename.")
-    
-    filepath = os.path.join(BACKUP_DIR, filename)
-    if not os.path.exists(filepath):
-        raise HTTPException(status_code=404, detail=f"Backup file '{filename}' not found.")
-    
-    try:
-        success = _run_psql_restore(filepath)
-        if not success:
-            raise HTTPException(status_code=500, detail="Restore with psql failed. Backup may be corrupt.")
-        return {"status": "success", "message": f"Database restored from {filename}"}
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Restore failed: {str(e)}")
+    # The web and scheduler containers intentionally never receive a role
+    # capable of restoring schema/data. Perform restores offline with the
+    # owner credential through the documented operational procedure instead.
+    raise HTTPException(
+        status_code=409,
+        detail="Web restores are disabled. Take the service offline and use the owner-only restore procedure.",
+    )
 
 
 @router.get("/settings")
@@ -240,6 +227,10 @@ def update_backup_settings(
     """Update backup configuration."""
     if current_user.role != "sys_admin":
         raise HTTPException(status_code=403, detail="Only System Admin can modify backup settings.")
+    if auto_backup.lower() not in {"true", "false"}:
+        raise HTTPException(status_code=400, detail="auto_backup must be true or false.")
+    if not 1 <= retention_days <= 3650:
+        raise HTTPException(status_code=400, detail="retention_days must be between 1 and 3650.")
     
     for key, value in [("auto_backup", auto_backup), ("backup_retention_days", str(retention_days))]:
         setting = db.query(SystemSetting).filter(SystemSetting.key == key).first()

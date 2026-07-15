@@ -26,6 +26,7 @@ class Token(BaseModel):
     token_type: str
     role: str
     full_name: str  # 🆕 新增：登录成功后直接把姓名返给前端，方便前端展示
+    user_id: int
 
 class UserLogin(BaseModel):
     email: str

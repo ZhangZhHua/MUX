@@ -1,5 +1,5 @@
 import json
-from sqlalchemy import Table, Column, Integer, String, Text, ForeignKey, DateTime, Boolean
+from sqlalchemy import CheckConstraint, Table, Column, Integer, String, Text, ForeignKey, DateTime, Boolean, Index
 from sqlalchemy.orm import relationship
 from datetime import datetime
 from config.database import Base
@@ -28,6 +28,10 @@ event_participant_association = Table(
 
 class LabEvent(Base):
     __tablename__ = "lab_events"
+    __table_args__ = (
+        CheckConstraint("end_date IS NULL OR end_date >= start_date", name="ck_lab_events_date_range"),
+        Index('ix_lab_events_group_start', 'group_id', 'start_date'),
+    )
 
     id = Column(Integer, primary_key=True, index=True)
     title = Column(String, nullable=False)

@@ -1,5 +1,5 @@
 
-from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey
+from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey, Index
 from sqlalchemy.orm import relationship
 from datetime import datetime
 from config.database import Base
@@ -8,6 +8,7 @@ from config.database import Base
 # 🆕 1. 物理通知/公告数据表
 class Notice(Base):
     __tablename__ = "notices"
+    __table_args__ = (Index('ix_notices_group_type_created', 'group_id', 'type', 'created_at'),)
 
     id = Column(Integer, primary_key=True, index=True)
     type = Column(String, default="team") # "system" (全局强穿透置顶) 或 "team" (课题组局部联动)
@@ -23,6 +24,7 @@ class Notice(Base):
 # 🆕 2. 自动化审计流水线数据表（高可扩展：支持后续无限追加更多事项）
 class ActivityLog(Base):
     __tablename__ = "activity_logs"
+    __table_args__ = (Index('ix_activity_logs_group_created', 'group_id', 'created_at'),)
 
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"))

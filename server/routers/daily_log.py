@@ -1,122 +1,49 @@
-import os
-import re
 from datetime import datetime
-from fastapi import APIRouter, Depends, HTTPException, status, File, UploadFile, Request
+from fastapi import APIRouter, Depends, HTTPException, status, File, UploadFile
 from fastapi.responses import FileResponse
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 from typing import List
 from config.database import get_db
-from models.daily_log import DailyLog
+from models.daily_log import Attachment, DailyLog
 from schemas.daily_log import DailyLogCreate, DailyLogResponse
 from routers.auth import get_current_user
 from models.user import User
-from models.experiment import Experiment  # 🆕 用于顺藤摸瓜查实验标题
+from models.experiment import Experiment
 from routers.experiment import log_telemetry_activity  # 🆕 引入我们写好的审计引擎函数
-from utils.security import decode_access_token  # 🆕 引入 token 解密工具
+from routers.authorization import require_daily_log_access, require_experiment_access, require_group_member
+from utils.uploads import resolve_attachment_path, save_verified_upload
 
 router = APIRouter(prefix="/experiments", tags=["Daily Logs"])
 
-UPLOAD_DIR = "uploads"
-if not os.path.exists(UPLOAD_DIR):
-    os.makedirs(UPLOAD_DIR)
+def _claim_attachments(db: Session, names: List[str], user: User, experiment: Experiment, daily_log: DailyLog) -> None:
+    if not names:
+        return
+    attachments = db.query(Attachment).filter(Attachment.storage_name.in_(set(names))).all()
+    if len(attachments) != len(set(names)):
+        raise HTTPException(status_code=400, detail="One or more attachments do not exist.")
+    for attachment in attachments:
+        if attachment.owner_id != user.id and user.role != "sys_admin" and attachment.daily_log_id != daily_log.id:
+            raise HTTPException(status_code=403, detail="You may only attach files you uploaded.")
+        if attachment.daily_log_id not in (None, daily_log.id):
+            raise HTTPException(status_code=409, detail="An attachment is already linked to another log.")
+        attachment.group_id = experiment.group_id
+        attachment.daily_log_id = daily_log.id
 
-from typing import List, Optional
 
-# 🆕 双通身份验证依赖守卫 (失败时返回 None 而不是抛出异常，交给端点自行判定是否必须拦截)
-def get_current_user_from_header_or_query(
-    request: Request,
-    token: str = None,
-    db: Session = Depends(get_db)
-) -> Optional[User]:
-    actual_token = token
-    if not actual_token:
-        auth_header = request.headers.get("Authorization")
-        if auth_header and auth_header.startswith("Bearer "):
-            actual_token = auth_header.split(" ")[1]
-            
-    if not actual_token:
-        return None
-        
-    try:
-        payload = decode_access_token(actual_token)
-        if payload is None:
-            return None
-        email: str = payload.get("sub")
-        if email is None:
-            return None
-        user = db.query(User).filter(User.email == email).first()
-        return user
-    except Exception:
-        return None
-
-# 1. 物理二进制文件流上传
+# Uploads are unbound until a log claims them. They remain inaccessible to other
+# users during that short interval because downloads require an attachment row
+# with an authorized group.
 @router.post("/upload")
-def upload_file(file: UploadFile = File(...), current_user: User = Depends(get_current_user)):
-    try:
-        # Check size limit: 50MB (50 * 1024 * 1024 bytes)
-        file.file.seek(0, 2)
-        file_size = file.file.tell()
-        file.file.seek(0)
-        
-        if file_size > 50 * 1024 * 1024:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Attachment size exceeds the maximum limit of 50MB"
-            )
-
-        file_path = os.path.join(UPLOAD_DIR, file.filename)
-        with open(file_path, "wb") as f:
-            f.write(file.file.read())
-        return {"filename": file.filename}
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"File write error on lab server: {str(e)}")
+async def upload_file(file: UploadFile = File(...), db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    storage_name, original_name, media_type, size_bytes, digest = await save_verified_upload(file)
+    db.add(Attachment(storage_name=storage_name, original_name=original_name, media_type=media_type, size_bytes=size_bytes, sha256=digest, owner_id=current_user.id))
+    db.commit()
+    return {"filename": storage_name, "original_name": original_name}
 
 # 1b. 粘贴图片专用上传（自动生成 picture_pasted_XXX 文件名）
 @router.post("/upload/paste")
-def upload_pasted_image(file: UploadFile = File(...), current_user: User = Depends(get_current_user)):
-    try:
-        # Check size limit: 50MB
-        file.file.seek(0, 2)
-        file_size = file.file.tell()
-        file.file.seek(0)
-        
-        if file_size > 50 * 1024 * 1024:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Image size exceeds the maximum limit of 50MB"
-            )
-        
-        # Determine extension from original filename or content-type
-        original_name = file.filename or "image.png"
-        ext = original_name.rsplit(".", 1)[-1].lower() if "." in original_name else "png"
-        if ext not in ("png", "jpg", "jpeg", "gif", "webp", "bmp"):
-            ext = "png"
-        
-        # Find next available sequence number
-        existing_files = os.listdir(UPLOAD_DIR)
-        max_seq = 0
-        pattern = re.compile(r"^picture_pasted_(\d{3})\.")
-        for fname in existing_files:
-            m = pattern.match(fname)
-            if m:
-                seq = int(m.group(1))
-                if seq > max_seq:
-                    max_seq = seq
-        
-        next_seq = max_seq + 1
-        saved_name = f"picture_pasted_{next_seq:03d}.{ext}"
-        file_path = os.path.join(UPLOAD_DIR, saved_name)
-        
-        with open(file_path, "wb") as f:
-            f.write(file.file.read())
-        
-        return {"filename": saved_name}
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Pasted image write error: {str(e)}")
+async def upload_pasted_image(file: UploadFile = File(...), db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    return await upload_file(file, db, current_user)
 
 # 2. 物理二进制安全下载与预览
 @router.get("/attachments/{filename}")
@@ -124,46 +51,25 @@ def download_file(
     filename: str,
     preview: bool = False,
     db: Session = Depends(get_db),
-    current_user: Optional[User] = Depends(get_current_user_from_header_or_query)
+    current_user: User = Depends(get_current_user)
 ):
-    file_path = os.path.join(UPLOAD_DIR, filename)
-    if not os.path.exists(file_path):
-        raise HTTPException(status_code=404, detail="Requested telemetry file not found on server")
-    
-    # 验证权限 (只针对非公开头像的文件进行限制)
-    is_avatar = db.query(User).filter(User.avatar_node == filename).first() is not None
-    if not is_avatar:
-        if not current_user:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Authentication token is missing or invalid. Access denied."
-            )
-            
-        daily_log = db.query(DailyLog).filter(DailyLog.attachments_json.like(f"%{filename}%")).first()
-        if daily_log:
-            experiment = daily_log.experiment
-            if current_user.role != "sys_admin":
-                user_group_ids = [g.id for g in current_user.groups]
-                if experiment.group_id not in user_group_ids:
-                    raise HTTPException(
-                        status_code=status.HTTP_403_FORBIDDEN,
-                        detail="Forbidden: You are not authorized to access this experiment's files."
-                    )
+    attachment = db.query(Attachment).filter(Attachment.storage_name == filename).first()
+    if not attachment:
+        raise HTTPException(status_code=404, detail="Attachment not found.")
+    if attachment.group_id is None:
+        if attachment.owner_id != current_user.id and current_user.role != "sys_admin":
+            raise HTTPException(status_code=403, detail="You are not authorized to access this attachment.")
+    else:
+        require_group_member(db, current_user, attachment.group_id)
+    file_path = resolve_attachment_path(attachment.storage_name)
     
     if preview:
-        import mimetypes
-        media_type, _ = mimetypes.guess_type(file_path)
-        if not media_type:
-            if filename.lower().endswith('.pdf'):
-                media_type = "application/pdf"
-            else:
-                media_type = "application/octet-stream"
         return FileResponse(
             file_path,
-            media_type=media_type,
+            media_type=attachment.media_type,
             headers={"Content-Disposition": "inline"}
         )
-    return FileResponse(file_path, filename=filename)
+    return FileResponse(file_path, filename=attachment.original_name, media_type=attachment.media_type)
 
 
 
@@ -176,9 +82,7 @@ def create_experiment_log(
     current_user: User = Depends(get_current_user)
 ):
     # 🔍 核心新增：顺藤摸瓜，先查出这个日志所属的母体实验项目，拿到标题和团队 ID
-    experiment = db.query(Experiment).filter(Experiment.id == experiment_id).first()
-    if not experiment:
-        raise HTTPException(status_code=404, detail="Target experiment node not found.")
+    experiment = require_experiment_access(db, current_user, experiment_id)
 
     new_log = DailyLog(
         experiment_id=experiment_id,
@@ -186,7 +90,7 @@ def create_experiment_log(
         content=log_data.content,
         participants=log_data.participants
     )
-    new_log.attachments = log_data.attachments
+    new_log.attachments = log_data.attachments or []
     if log_data.shift_date:
         new_log.shift_date = log_data.shift_date
     else:
@@ -194,6 +98,8 @@ def create_experiment_log(
     
     experiment.updated_at = datetime.utcnow()
     db.add(new_log)
+    db.flush()
+    _claim_attachments(db, new_log.attachments, current_user, experiment, new_log)
     db.commit()
     db.refresh(new_log)
 
@@ -211,8 +117,18 @@ def create_experiment_log(
 
 # 4. 获取指定实验下的全量日志时间线（保持不动）
 @router.get("/{experiment_id}/logs", response_model=List[DailyLogResponse])
-def get_experiment_logs(experiment_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    return db.query(DailyLog).filter(DailyLog.experiment_id == experiment_id).order_by(DailyLog.created_at.desc()).all()
+def get_experiment_logs(
+    experiment_id: int,
+    offset: int = 0,
+    limit: int = 100,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    require_experiment_access(db, current_user, experiment_id)
+    limit = min(max(limit, 1), 200)
+    return db.query(DailyLog).options(selectinload(DailyLog.author)).filter(
+        DailyLog.experiment_id == experiment_id
+    ).order_by(DailyLog.created_at.desc()).offset(max(offset, 0)).limit(limit).all()
 
 
 # 5. 修改原有日志（支持增删/清空附件数组，并在成功时追加行为审计流水）
@@ -223,12 +139,10 @@ def update_experiment_log(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    log = db.query(DailyLog).filter(DailyLog.id == log_id).first()
-    if not log:
-        raise HTTPException(status_code=404, detail="Log record not found")
+    log = require_daily_log_access(db, current_user, log_id)
         
     # 🔍 核心新增：顺藤摸瓜，通过日志关联的 experiment_id 反向捞出母体实验的信息
-    experiment = db.query(Experiment).filter(Experiment.id == log.experiment_id).first()
+    experiment = require_experiment_access(db, current_user, log.experiment_id)
 
     is_authorized = False
     if current_user.role == "sys_admin":
@@ -247,7 +161,8 @@ def update_experiment_log(
         
     log.content = log_data.content
     log.participants = log_data.participants
-    log.attachments = log_data.attachments 
+    log.attachments = log_data.attachments or []
+    _claim_attachments(db, log.attachments, current_user, experiment, log)
     
     if experiment:
         experiment.updated_at = datetime.utcnow()
@@ -273,12 +188,10 @@ def delete_experiment_log(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    log = db.query(DailyLog).filter(DailyLog.id == log_id).first()
-    if not log:
-        raise HTTPException(status_code=404, detail="Log record not found")
+    log = require_daily_log_access(db, current_user, log_id)
         
     # 权限规则：创建者本人，或者超级管理员，或者该实验所属研究组的组长可以删除
-    experiment = db.query(Experiment).filter(Experiment.id == log.experiment_id).first()
+    experiment = require_experiment_access(db, current_user, log.experiment_id)
     
     is_authorized = False
     if current_user.role == "sys_admin":

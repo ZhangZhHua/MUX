@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Text, ForeignKey, Table, DateTime, Boolean
+from sqlalchemy import CheckConstraint, Column, Integer, String, Text, ForeignKey, Table, DateTime, Boolean, Index
 from sqlalchemy.orm import relationship
 from datetime import datetime
 from config.database import Base
@@ -22,6 +22,10 @@ experiment_user_association = Table(
 
 class Experiment(Base):
     __tablename__ = "experiments"
+    __table_args__ = (
+        CheckConstraint("status IN ('running', 'paused', 'completed', 'archived')", name="ck_experiments_status"),
+        Index('ix_experiments_group_deleted_updated', 'group_id', 'is_deleted', 'updated_at'),
+    )
 
     id = Column(Integer, primary_key=True, index=True)
     group_id = Column(Integer, ForeignKey('groups.id', ondelete="CASCADE"), nullable=False)

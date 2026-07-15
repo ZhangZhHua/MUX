@@ -1545,20 +1545,27 @@ const submitComment = async (event) => {
 };
 
 // Attachments Handling
-const handleAttachmentClick = (filename, uploader) => {
+const handleAttachmentClick = async (filename, uploader) => {
   if (!filename) return;
   const lowercaseName = filename.toLowerCase();
-  const token = localStorage.getItem('token') || '';
   
   if (lowercaseName.endsWith('.pdf')) {
-    const url = `${api.defaults.baseURL}/events/attachments/${filename}?preview=true&token=${token}`;
-    window.open(url, '_blank');
-    toast.info(`📖 Opening PDF preview [${truncateFileName(filename, 16)}] in new tab...`);
+    try {
+      const response = await api.get(`/events/attachments/${encodeURIComponent(filename)}?preview=true`, { responseType: 'blob' });
+      window.open(URL.createObjectURL(response.data), '_blank', 'noopener');
+    } catch {
+      toast.error('Unable to load the protected PDF preview.');
+    }
   } else if (/\.(png|jpe?g|gif|webp)$/i.test(lowercaseName)) {
-    lightboxFilename.value = filename;
-    lightboxUploader.value = uploader;
-    lightboxImageUrl.value = `${api.defaults.baseURL}/events/attachments/${filename}?preview=true&token=${token}`;
-    lightboxOpen.value = true;
+    try {
+      const response = await api.get(`/events/attachments/${encodeURIComponent(filename)}?preview=true`, { responseType: 'blob' });
+      lightboxFilename.value = filename;
+      lightboxUploader.value = uploader;
+      lightboxImageUrl.value = URL.createObjectURL(response.data);
+      lightboxOpen.value = true;
+    } catch {
+      toast.error('Unable to load the protected image preview.');
+    }
   } else {
     handleDownloadFile(filename);
   }

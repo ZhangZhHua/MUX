@@ -4,9 +4,9 @@ services:
     container_name: mux-db
     restart: always
     environment:
-      POSTGRES_USER: ${DB_USER:-mux_prod_admin}
-      POSTGRES_PASSWORD: ${DB_PASSWORD:-mux_lab_password_2026}
-      POSTGRES_DB: ${DB_NAME:-mux_lab_logs}
+      POSTGRES_USER: ${DB_USER:?DB_USER must be set in .env.prod}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD must be set in .env.prod}
+      POSTGRES_DB: ${DB_NAME:?DB_NAME must be set in .env.prod}
     volumes:
       - postgres_prod_data:/var/lib/postgresql/data
     healthcheck:
@@ -32,25 +32,73 @@ services:
         condition: service_healthy
         restart: true
     ports:
-      - "${APP_PORT:-18080}:80"
+      # Local HTTP development is loopback-only. A production TLS proxy can
+      # reach this address; explicitly set 0.0.0.0 only after enabling TLS.
+      - "${APP_BIND_ADDRESS:-127.0.0.1}:${APP_PORT:-18080}:8080"
     environment:
+      ENVIRONMENT: production
       DB_HOST: mux-db
       DB_PORT: "5432"
-      DB_USER: ${DB_USER:-mux_prod_admin}
-      DB_PASSWORD: ${DB_PASSWORD:-mux_lab_password_2026}
-      DB_NAME: ${DB_NAME:-mux_lab_logs}
-      SECRET_KEY: ${SECRET_KEY:-change-me-in-production}
-      ACCESS_TOKEN_EXPIRE_MINUTES: ${ACCESS_TOKEN_EXPIRE_MINUTES:-1440}
+      APP_DB_USER: ${APP_DB_USER:?APP_DB_USER must be set in .env.prod}
+      APP_DB_PASSWORD: ${APP_DB_PASSWORD:?APP_DB_PASSWORD must be set in .env.prod}
+      BACKUP_DB_USER: ${BACKUP_DB_USER:?BACKUP_DB_USER must be set in .env.prod}
+      BACKUP_DB_PASSWORD: ${BACKUP_DB_PASSWORD:?BACKUP_DB_PASSWORD must be set in .env.prod}
+      DB_NAME: ${DB_NAME:?DB_NAME must be set in .env.prod}
+      SECRET_KEY: ${SECRET_KEY:?SECRET_KEY must be set in .env.prod}
+      ACCESS_TOKEN_EXPIRE_MINUTES: ${ACCESS_TOKEN_EXPIRE_MINUTES:-60}
+      # Direct HTTP is supported only for local development. Production must
+      # terminate TLS and explicitly set COOKIE_SECURE=true.
+      COOKIE_SECURE: ${COOKIE_SECURE:-false}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:18080}
       BACKUP_DIR: /backups
+      BACKUP_ENCRYPTION_KEY: ${BACKUP_ENCRYPTION_KEY:?BACKUP_ENCRYPTION_KEY must be set in .env.prod}
+      MAINTENANCE_MODE: ${MAINTENANCE_MODE:-false}
+      GUNICORN_WORKERS: ${GUNICORN_WORKERS:-2}
     volumes:
       - ./server/uploads:/app/uploads
       - ./backups:/backups
     healthcheck:
-      test: ["CMD-SHELL", "curl --fail --silent http://127.0.0.1:8000/ >/dev/null && curl --fail --silent http://127.0.0.1/ >/dev/null"]
+      test: ["CMD-SHELL", "curl --fail --silent http://127.0.0.1:8000/ >/dev/null && curl --fail --silent http://127.0.0.1:8080/ >/dev/null"]
       interval: 30s
       timeout: 5s
       retries: 3
       start_period: 30s
+
+  mux-scheduler:
+    image: physics-lab-log-mux-app
+    container_name: mux-scheduler
+    restart: always
+    depends_on:
+      mux-db:
+        condition: service_healthy
+    environment:
+      APP_ROLE: scheduler
+      ENVIRONMENT: production
+      DB_HOST: mux-db
+      DB_PORT: "5432"
+      APP_DB_USER: ${APP_DB_USER:?APP_DB_USER must be set in .env.prod}
+      APP_DB_PASSWORD: ${APP_DB_PASSWORD:?APP_DB_PASSWORD must be set in .env.prod}
+      BACKUP_DB_USER: ${BACKUP_DB_USER:?BACKUP_DB_USER must be set in .env.prod}
+      BACKUP_DB_PASSWORD: ${BACKUP_DB_PASSWORD:?BACKUP_DB_PASSWORD must be set in .env.prod}
+      DB_NAME: ${DB_NAME:?DB_NAME must be set in .env.prod}
+      BACKUP_DIR: /backups
+      BACKUP_ENCRYPTION_KEY: ${BACKUP_ENCRYPTION_KEY:?BACKUP_ENCRYPTION_KEY must be set in .env.prod}
+    volumes:
+      - ./backups:/backups
+    healthcheck:
+      disable: true
+
+  mux-migrator:
+    image: physics-lab-log-mux-app
+    profiles: ["migration"]
+    environment:
+      APP_ROLE: migrator
+      ENVIRONMENT: production
+      DB_HOST: mux-db
+      DB_PORT: "5432"
+      DB_USER: ${DB_USER:?DB_USER must be set in .env.prod}
+      DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD must be set in .env.prod}
+      DB_NAME: ${DB_NAME:?DB_NAME must be set in .env.prod}
 
 volumes:
   postgres_prod_data:

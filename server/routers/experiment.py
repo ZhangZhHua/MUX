@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import case
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 from typing import List, Optional
 from datetime import datetime
 from config.database import get_db
@@ -10,11 +10,12 @@ from schemas.experiment import (
     BulletinCreate, BulletinResponse, ExperimentStepCreate, ExperimentStepUpdate, ExperimentStepResponse
 )
 from routers.auth import get_current_user
-from models.user import User, Group
+from models.user import User, Group, group_users_association
 from models.event import LabEvent
 from schemas.user import UserResponse
 from models.intelligence import Notice, ActivityLog
 from schemas.intelligence import NoticeCreate, NoticeResponse, ActivityLogResponse
+from routers.authorization import accessible_group_ids, require_experiment_access, require_experiment_admin, require_group_admin, require_group_member
 
 
 router = APIRouter(prefix="/experiments", tags=["Experiments"])
@@ -29,10 +30,7 @@ def create_experiment(
     if current_user.role == "member":
         raise HTTPException(status_code=403, detail="普通成员无权创建实验项目")
 
-    # 私人Group访问控制
-    group = db.query(Group).filter(Group.id == exp_data.group_id).first()
-    if group and group.is_private and group.owner_id != current_user.id and current_user.role != "sys_admin":
-        raise HTTPException(status_code=403, detail="You cannot create experiments in another user's private workspace.")
+    require_group_admin(db, current_user, exp_data.group_id)
 
     # 创建新的实验实例，使用提供的数据填充各个字段
     # 如果未提供状态，则默认设置为"running"
@@ -61,6 +59,8 @@ def create_experiment(
 def get_experiments(
     group_id: int = 0, # 给定默认值 0
     tag: Optional[str] = None,
+    offset: int = Query(0, ge=0),
+    limit: int = Query(50, ge=1, le=100),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -73,16 +73,16 @@ def get_experiments(
         else:
             query = db.query(Experiment).filter(Experiment.is_deleted == False)
     else:
-        # 私人Group访问控制：非owner且非sys_admin无法查看
-        if current_user.role != "sys_admin":
-            group = db.query(Group).filter(Group.id == group_id).first()
-            if group and group.is_private and group.owner_id != current_user.id:
-                raise HTTPException(status_code=403, detail="You cannot access this private workspace.")
+        require_group_member(db, current_user, group_id)
         query = db.query(Experiment).filter(Experiment.group_id == group_id, Experiment.is_deleted == False)
 
     if tag:
         query = query.join(Experiment.tags).filter(Tag.name == tag)
-    return query.order_by(Experiment.updated_at.desc()).all()
+    return query.options(
+        selectinload(Experiment.tags),
+        selectinload(Experiment.members),
+        selectinload(Experiment.group),
+    ).order_by(Experiment.updated_at.desc()).offset(offset).limit(limit).all()
 
 @router.get("/tags", response_model=List[TagResponse])
 def get_all_tags(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
@@ -144,14 +144,9 @@ def restore_experiment(
     if current_user.role not in ["sys_admin", "team_admin"]:
         raise HTTPException(status_code=403, detail="Permission denied. Only admins can restore experiments.")
 
-    experiment = db.query(Experiment).filter(Experiment.id == id, Experiment.is_deleted == True).first()
-    if not experiment:
+    experiment = require_experiment_admin(db, current_user, id, include_deleted=True)
+    if not experiment.is_deleted:
         raise HTTPException(status_code=404, detail="Deleted experiment not found in recycle bin.")
-
-    if current_user.role == "team_admin":
-        user_group_ids = [g.id for g in current_user.groups]
-        if experiment.group_id not in user_group_ids:
-            raise HTTPException(status_code=403, detail="Permission denied.")
 
     experiment.is_deleted = False
     experiment.deleted_at = None
@@ -178,10 +173,7 @@ def unified_search(
 
 @router.get("/{id}", response_model=ExperimentResponse)
 def get_single_experiment(id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    exp = db.query(Experiment).filter(Experiment.id == id).first()
-    if not exp:
-        raise HTTPException(status_code=404, detail="实验项目未找到")
-    return exp
+    return require_experiment_access(db, current_user, id)
 
 # 🆕 重构：全能更新接口，支持修改大纲、标题、运行状态和标签列表
 @router.put("/{id}", response_model=ExperimentResponse)
@@ -191,9 +183,7 @@ def update_experiment(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    exp = db.query(Experiment).filter(Experiment.id == id).first()
-    if not exp:
-        raise HTTPException(status_code=404, detail="实验项目未找到")
+    exp = require_experiment_admin(db, current_user, id)
 
     if update_data.title is not None:
         exp.title = update_data.title
@@ -240,25 +230,26 @@ def update_experiment(
 
 @router.put("/{id}/members")
 def sync_experiment_members(id: int, user_ids: List[int], db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    exp = db.query(Experiment).filter(Experiment.id == id).first()
-    if not exp:
-        raise HTTPException(status_code=404, detail="实验项目未找到")
+    exp = require_experiment_admin(db, current_user, id)
 
-    selected_users = db.query(User).filter(User.id.in_(user_ids)).all()
+    selected_users = db.query(User).join(User.groups).filter(
+        User.id.in_(user_ids), Group.id == exp.group_id
+    ).all()
+    if len(selected_users) != len(set(user_ids)):
+        raise HTTPException(status_code=400, detail="All experiment members must belong to the experiment group.")
     exp.members = selected_users
     db.commit()
     return {"message": "实验研究人员同步成功"}
 
 @router.get("/groups/{group_id}/members", response_model=List[UserResponse])
 def get_group_members(group_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    group = db.query(Group).filter(Group.id == group_id).first()
-    if not group:
-        raise HTTPException(status_code=404, detail="科研团队未找到")
+    group = require_group_member(db, current_user, group_id)
     return group.members
 
 # 🆕 1. 获取指定实验底下的全位置顶通告
 @router.get("/{experiment_id}/bulletins", response_model=List[BulletinResponse])
 def get_experiment_bulletins(experiment_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    require_experiment_access(db, current_user, experiment_id)
     return db.query(Bulletin).filter(Bulletin.experiment_id == experiment_id).order_by(Bulletin.created_at.asc()).all()
 
 def log_telemetry_activity(db: Session, user_id: int, action: str, target: str, group_id: Optional[int] = None):
@@ -282,13 +273,7 @@ def create_experiment_bulletin(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    if current_user.role == "member":
-        raise HTTPException(status_code=403, detail="Permission denied. Only operators or admins can post bulletins.")
-
-    # 🔍 核心修复：先查询出这个通知所属的母体实验对象
-    experiment = db.query(Experiment).filter(Experiment.id == experiment_id).first()
-    if not experiment:
-        raise HTTPException(status_code=404, detail="Target experiment node not found.")
+    experiment = require_experiment_admin(db, current_user, experiment_id)
 
     new_bulletin = Bulletin(
         experiment_id=experiment_id,
@@ -316,18 +301,23 @@ def delete_experiment_bulletin(bulletin_id: int, db: Session = Depends(get_db), 
     if current_user.role == "member":
         raise HTTPException(status_code=403, detail="Permission denied. Only operators or admins can clear bulletins.")
 
-    bulletin = db.query(Bulletin).filter(Bulletin.id == bulletin_id).first()
+    bulletin = db.query(Bulletin).join(Experiment, Bulletin.experiment_id == Experiment.id).filter(Bulletin.id == bulletin_id).first()
     if not bulletin:
         raise HTTPException(status_code=404, detail="Bulletin notice not found")
 
+    require_experiment_admin(db, current_user, bulletin.experiment_id)
     db.delete(bulletin)
     db.commit()
     return {"message": "Bulletin notice removed from active board"}
 
 @router.get("/groups") # 或者对应的路径
 def get_user_groups(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    # 确保它能正常返回数据
-    return db.query(Group).all()
+    if current_user.role == "sys_admin":
+        return db.query(Group).all()
+    return db.query(Group).join(
+        group_users_association,
+        group_users_association.c.group_id == Group.id,
+    ).filter(group_users_association.c.user_id == current_user.id).all()
 
 
 # 🆕 API 1. 穿透型通知拉取流：根据当前激活团队或聚合模式，级联吐出“系统通知+团队通知”
@@ -336,6 +326,7 @@ def get_synchronized_notices(group_id: int = 0, db: Session = Depends(get_db), c
     user_group_ids = [g.id for g in current_user.groups]
 
     if group_id != 0:
+        require_group_member(db, current_user, group_id)
         query = db.query(Notice).filter((Notice.type == "system") | ((Notice.type == "team") & (Notice.group_id == group_id)))
     else:
         if user_group_ids:
@@ -376,10 +367,10 @@ def broadcast_new_notice(payload: NoticeCreate, db: Session = Depends(get_db), c
         raise HTTPException(status_code=403, detail="特权级不足。只有系统超级管理员有权发布全局全校大通告。")
 
     # 🔒 权限哨兵三：如果是普通课题组长，校验其是否对目标组拥有管辖权
-    if payload.type == "team" and current_user.role != "sys_admin":
-        user_belongs_to_target = any(g.id == payload.group_id for g in current_user.groups)
-        if not user_belongs_to_target:
-            raise HTTPException(status_code=403, detail="边界越权。您无法向您未主管的课题组注入通知。")
+    if payload.type == "team":
+        if payload.group_id is None:
+            raise HTTPException(status_code=400, detail="Team notices require a group id.")
+        require_group_admin(db, current_user, payload.group_id)
 
     # 物理持久化写入
     new_notice = Notice(
@@ -439,6 +430,7 @@ def get_telemetry_activities_stream(group_id: int = 0, db: Session = Depends(get
             query = query.filter(ActivityLog.group_id.in_(my_group_ids))
     else:
         # 特定物理组过滤
+        require_group_member(db, current_user, group_id)
         query = query.filter(ActivityLog.group_id == group_id)
 
     raw_logs = query.order_by(ActivityLog.created_at.desc()).limit(15).all()
@@ -463,9 +455,7 @@ def get_experiment_steps(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    exp = db.query(Experiment).filter(Experiment.id == experiment_id).first()
-    if not exp:
-        raise HTTPException(status_code=404, detail="Experiment not found")
+    require_experiment_access(db, current_user, experiment_id)
     return db.query(ExperimentStep).filter(ExperimentStep.experiment_id == experiment_id).order_by(ExperimentStep.id.asc()).all()
 
 
@@ -476,12 +466,7 @@ def create_experiment_step(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    if current_user.role == "member":
-        raise HTTPException(status_code=403, detail="Permission denied. Only operators or admins can manage steps.")
-
-    exp = db.query(Experiment).filter(Experiment.id == experiment_id).first()
-    if not exp:
-        raise HTTPException(status_code=404, detail="Experiment not found")
+    exp = require_experiment_admin(db, current_user, experiment_id)
 
     new_step = ExperimentStep(
         experiment_id=experiment_id,
@@ -502,6 +487,7 @@ def update_experiment_step(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
+    exp = require_experiment_access(db, current_user, experiment_id)
     step = db.query(ExperimentStep).filter(
         ExperimentStep.id == step_id,
         ExperimentStep.experiment_id == experiment_id
@@ -509,19 +495,16 @@ def update_experiment_step(
     if not step:
         raise HTTPException(status_code=404, detail="Step not found")
 
-    # 如果修改标题，只有非普通成员（操作员/管理员）可以操作
+    # Step content is an experiment-wide resource; only group admins may change it.
     if step_data.title is not None:
-        if current_user.role == "member":
-            raise HTTPException(status_code=403, detail="Only admins can modify step titles.")
+        require_group_admin(db, current_user, exp.group_id)
         step.title = step_data.title.strip()
 
-    # 任何人均可勾选/取消勾选完成状态
     if step_data.is_completed is not None:
+        require_group_admin(db, current_user, exp.group_id)
         step.is_completed = step_data.is_completed
 
-    exp = db.query(Experiment).filter(Experiment.id == experiment_id).first()
-    if exp:
-        exp.updated_at = datetime.utcnow()
+    exp.updated_at = datetime.utcnow()
     db.commit()
     db.refresh(step)
     return step
@@ -534,8 +517,7 @@ def delete_experiment_step(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    if current_user.role == "member":
-        raise HTTPException(status_code=403, detail="Permission denied. Only admins can delete steps.")
+    exp = require_experiment_admin(db, current_user, experiment_id)
 
     step = db.query(ExperimentStep).filter(
         ExperimentStep.id == step_id,
@@ -545,9 +527,7 @@ def delete_experiment_step(
         raise HTTPException(status_code=404, detail="Step not found")
 
     db.delete(step)
-    exp = db.query(Experiment).filter(Experiment.id == experiment_id).first()
-    if exp:
-        exp.updated_at = datetime.utcnow()
+    exp.updated_at = datetime.utcnow()
     db.commit()
     return {"status": "success", "message": "Step deleted successfully"}
 
@@ -561,14 +541,7 @@ def delete_experiment(
     if current_user.role not in ["sys_admin", "team_admin"]:
         raise HTTPException(status_code=403, detail="Permission denied. Only admins can delete experiments.")
 
-    experiment = db.query(Experiment).filter(Experiment.id == id).first()
-    if not experiment:
-        raise HTTPException(status_code=404, detail="Experiment project not found.")
-
-    if current_user.role == "team_admin":
-        user_group_ids = [g.id for g in current_user.groups]
-        if experiment.group_id not in user_group_ids:
-            raise HTTPException(status_code=403, detail="Permission denied. You can only delete experiments in your own research groups.")
+    experiment = require_experiment_admin(db, current_user, id)
 
     log_telemetry_activity(
         db=db,
@@ -595,9 +568,7 @@ def permanent_delete_experiment(
     if current_user.role != "sys_admin":
         raise HTTPException(status_code=403, detail="Permission denied. Only System Admin can permanently delete experiments.")
 
-    experiment = db.query(Experiment).filter(Experiment.id == id).first()
-    if not experiment:
-        raise HTTPException(status_code=404, detail="Experiment not found.")
+    experiment = require_experiment_access(db, current_user, id, include_deleted=True)
 
     title = experiment.title
     gid = experiment.group_id

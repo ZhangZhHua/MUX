@@ -1,4 +1,6 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+import os
+import secrets
+from fastapi import APIRouter, Cookie, Depends, HTTPException, Request, Response, status
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
 from config.database import get_db
@@ -7,6 +9,7 @@ from models.intelligence import SystemSetting
 from schemas.user import UserCreate, UserResponse, GroupCreate, GroupResponse, UserLogin, Token, AssignAdminRequest, ProfileUpdate
 from schemas.intelligence import SystemSettingUpdate, SystemSettingResponse
 from utils.security import get_password_hash, verify_password, create_access_token, decode_access_token
+from routers.authorization import require_group_admin
 from fastapi.security import  OAuth2PasswordRequestForm # <- 确保引入了这个
 from typing import List
 from datetime import datetime, timedelta
@@ -15,15 +18,24 @@ from datetime import datetime, timedelta
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
 # 定义从请求头中获取 Token 的规则（Authorization: Bearer <TOKEN>）
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login")
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login", auto_error=False)
 
 # --- 守卫函数：获取当前登录用户 ---
-def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)) -> User:
+def get_current_user(request: Request, token: str = Depends(oauth2_scheme), access_token: str | None = Cookie(None), csrf_token: str | None = Cookie(None), db: Session = Depends(get_db)) -> User:
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
         headers={"WWW-Authenticate": "Bearer"},
     )
+    token = token or access_token
+    if not token:
+        raise credentials_exception
+    # Cookie-authenticated state-changing requests require a same-origin CSRF
+    # token. Bearer clients remain supported during migration.
+    if not request.headers.get("Authorization") and request.method not in {"GET", "HEAD", "OPTIONS"}:
+        csrf_header = request.headers.get("X-CSRF-Token")
+        if not csrf_token or not csrf_header or not secrets.compare_digest(csrf_token, csrf_header):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="CSRF validation failed")
     payload = decode_access_token(token)
     if payload is None:
         raise credentials_exception
@@ -32,8 +44,14 @@ def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(
         raise credentials_exception
     
     user = db.query(User).filter(User.email == email).first()
-    if user is None:
+    if user is None or user.status != "active":
         raise credentials_exception
+    timeout_setting = db.query(SystemSetting).filter(SystemSetting.key == "session_timeout").first()
+    timeout_minutes = int(timeout_setting.value) if timeout_setting else int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "60"))
+    previous_last_active = user.last_active_at
+    if previous_last_active and (datetime.utcnow() - previous_last_active).total_seconds() > timeout_minutes * 60:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Session has expired")
+    request.state.previous_last_active = previous_last_active
     user.last_active_at = datetime.utcnow()
     db.commit()
     return user
@@ -66,9 +84,8 @@ def register_user(user_data: UserCreate, db: Session = Depends(get_db)):
         status=user_status
     )
 
-    if user_data.group_ids:
-        associated_groups = db.query(Group).filter(Group.id.in_(user_data.group_ids)).all()
-        new_user.groups = associated_groups
+    # Public registration must not let an unauthenticated user self-enrol in an
+    # arbitrary research group. Group membership is granted by the group admin.
 
     db.add(new_user)
     db.flush()  # 先 flush 以获取 new_user.id
@@ -98,7 +115,7 @@ def register_user(user_data: UserCreate, db: Session = Depends(get_db)):
 
 # 2. 修改后的登录接口
 @router.post("/login", response_model=Token)
-def login(login_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
+def login(response: Response, login_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
     user = db.query(User).filter(User.email == login_data.username).first()
     
     if not user or not verify_password(login_data.password, user.hashed_password):
@@ -114,7 +131,12 @@ def login(login_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depen
     user.last_active_at = datetime.utcnow()
     db.commit()
     
-    access_token = create_access_token(data={"sub": user.email})
+    timeout_setting = db.query(SystemSetting).filter(SystemSetting.key == "session_timeout").first()
+    timeout_minutes = int(timeout_setting.value) if timeout_setting else int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "60"))
+    access_token = create_access_token(data={"sub": user.email}, expires_delta=timedelta(minutes=timeout_minutes))
+    secure_cookie = os.getenv("COOKIE_SECURE", "false").lower() == "true"
+    response.set_cookie("access_token", access_token, httponly=True, secure=secure_cookie, samesite="lax", max_age=timeout_minutes * 60)
+    response.set_cookie("csrf_token", secrets.token_urlsafe(32), httponly=False, secure=secure_cookie, samesite="lax", max_age=timeout_minutes * 60)
     
     # 🆕 拼接英文姓名（通常是 First Name + Last Name）
     full_name = f"{user.first_name} {user.last_name}"
@@ -126,6 +148,12 @@ def login(login_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depen
         "full_name": full_name,  # 🆕 返回给前端
         "user_id": user.id
     }
+
+
+@router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
+def logout(response: Response):
+    response.delete_cookie("access_token")
+    response.delete_cookie("csrf_token")
 
 # --- 3. 指定团队管理员（仅限系统管理员操作） ---
 @router.put("/assign-team-admin")
@@ -150,20 +178,6 @@ def assign_team_admin(
     target_user.role = "team_admin"
     db.commit()
     return {"message": f"User {target_user.email} has been successfully promoted to team_admin."}
-
-
-# --- 4. 临时创建团队接口 ---
-@router.post("/groups", response_model=GroupResponse)
-def create_group(group_data: GroupCreate, db: Session = Depends(get_db)):
-    existing_group = db.query(Group).filter(Group.name == group_data.name).first()
-    if existing_group:
-        raise HTTPException(status_code=400, detail="Group name already exists.")
-    new_group = Group(name=group_data.name, description=group_data.description)
-    db.add(new_group)
-    db.commit()
-    db.refresh(new_group)
-    return new_group
-
 
 
 # 🆕 1. 获取当前登录科学家的完整最新档案
@@ -294,9 +308,7 @@ def add_scientist_to_group_cluster(
         raise HTTPException(status_code=400, detail="Missing user_id in payload.")
         
     # Verify group and user existence
-    group = db.query(Group).filter(Group.id == group_id).first()
-    if not group:
-        raise HTTPException(status_code=404, detail="Target group not found.")
+    group = require_group_admin(db, current_user, group_id)
         
     user = db.query(User).filter(User.id == target_user_id).first()
     if not user:
@@ -360,11 +372,12 @@ def remove_scientist_from_group_cluster(
         if current_user.role != "team_admin" or not is_owner_of_group:
             raise HTTPException(status_code=403, detail="组织越权。只有本实验室负责人或超级管理员有权调整编制。")
             
-    # 检索物理实体
-    group = db.query(Group).filter(Group.id == group_id).first()
+    # Query the target group and the caller's membership in one authorization
+    # boundary rather than loading an arbitrary group by id first.
+    group = require_group_admin(db, current_user, group_id)
     target_scientist = db.query(User).filter(User.id == user_id).first()
     
-    if not group or not target_scientist:
+    if not target_scientist:
         raise HTTPException(status_code=404, detail="未检索到对应的团队或研究人员档案节点")
         
     # 🛡️ 边界断路器二：下属绝对不能开除上司（普通 PI 无法踢出进组视察的 sys_admin）
@@ -495,17 +508,20 @@ def reject_user(user_id: int, db: Session = Depends(get_db), current_user: User 
 
 
 @router.get("/users/session-status")
-def check_session_status(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+def check_session_status(request: Request, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     timeout_str = db.query(SystemSetting).filter(SystemSetting.key == "session_timeout").first()
     timeout_minutes = int(timeout_str.value) if timeout_str else 120
     now = datetime.utcnow()
     is_timed_out = False
-    if current_user.last_active_at:
-        elapsed = (now - current_user.last_active_at).total_seconds() / 60
+    # `get_current_user` stores the pre-request value on request.state; use it
+    # so this status request does not hide an expired idle session.
+    previous_last_active = getattr(request.state, "previous_last_active", None)
+    if previous_last_active:
+        elapsed = (now - previous_last_active).total_seconds() / 60
         is_timed_out = elapsed > timeout_minutes
     return {
         "session_timeout_minutes": timeout_minutes,
-        "last_active_at": current_user.last_active_at.isoformat() if current_user.last_active_at else None,
+        "last_active_at": previous_last_active.isoformat() if previous_last_active else None,
         "is_timed_out": is_timed_out
     }
 

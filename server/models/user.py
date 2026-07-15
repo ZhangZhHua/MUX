@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Text, ForeignKey, Table, Boolean, DateTime
+from sqlalchemy import CheckConstraint, Column, Integer, String, Text, ForeignKey, Table, Boolean, DateTime, Index
 from sqlalchemy.orm import relationship
 from config.database import Base
 
@@ -9,9 +9,14 @@ group_users_association = Table(
     Column('user_id', Integer, ForeignKey('users.id', ondelete="CASCADE"), primary_key=True),
     Column('group_id', Integer, ForeignKey('groups.id', ondelete="CASCADE"), primary_key=True)
 )
+Index('ix_group_users_group_user', group_users_association.c.group_id, group_users_association.c.user_id)
 
 class User(Base):
     __tablename__ = "users"
+    __table_args__ = (
+        CheckConstraint("role IN ('sys_admin', 'team_admin', 'member')", name="ck_users_role"),
+        CheckConstraint("status IN ('active', 'pending', 'rejected')", name="ck_users_status"),
+    )
 
     id = Column(Integer, primary_key=True, index=True)
     email = Column(String, unique=True, index=True, nullable=False)

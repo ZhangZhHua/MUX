@@ -1,5 +1,5 @@
 from pydantic import BaseModel
-from typing import List, Optional
+from typing import List, Literal, Optional
 from datetime import datetime
 from schemas.user import UserResponse, GroupMinResponse # 🆕 引入 UserResponse, GroupMinResponse
 # 标签的返回规范
@@ -17,14 +17,14 @@ class ExperimentCreate(BaseModel):
     title: str
     description: Optional[str] = None
     format_type: Optional[str] = "markdown"
-    status: Optional[str] = "running" # 🆕 新增创建时的可选状态
+    status: Literal["running", "paused", "completed", "archived"] = "running"
 
 class ExperimentUpdate(BaseModel):
     title: Optional[str] = None          # 🆕 支持更新标题
     description: Optional[str] = None
     current_task: Optional[str] = None   # 🆕 支持更新正在执行的任务
     format_type: Optional[str] = None
-    status: Optional[str] = None         # 🆕 支持更新运行状态
+    status: Optional[Literal["running", "paused", "completed", "archived"]] = None
     tags: Optional[List[str]] = None     # 🆕 支持同步更新关联的标签列表
 
 class ExperimentResponse(BaseModel):

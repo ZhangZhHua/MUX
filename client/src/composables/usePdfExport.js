@@ -1,7 +1,4 @@
 import { readonly, shallowRef } from 'vue';
-import { buildExperimentPdf } from '../features/pdf/buildExperimentPdf.js';
-import { loadPdfImages } from '../features/pdf/loadPdfImages.js';
-import { registerPdfFonts } from '../features/pdf/registerPdfFonts.js';
 
 function formatDate(value) {
   const date = new Date(value);
@@ -42,6 +39,11 @@ export function usePdfExport() {
     try {
       const pdfMakeModule = await import('pdfmake/build/pdfmake');
       const pdfMake = pdfMakeModule.default || pdfMakeModule;
+      const [{ buildExperimentPdf }, { loadPdfImages }, { registerPdfFonts }] = await Promise.all([
+        import('../features/pdf/buildExperimentPdf.js'),
+        import('../features/pdf/loadPdfImages.js'),
+        import('../features/pdf/registerPdfFonts.js')
+      ]);
 
       exportStatus.value = 'Loading PDF fonts...';
       await registerPdfFonts(pdfMake);

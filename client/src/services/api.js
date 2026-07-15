@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const AUTH_STORAGE_KEYS = ['token', 'role', 'userName', 'userId'];
+const AUTH_STORAGE_KEYS = ['role', 'userName', 'userId'];
 let redirectingToLogin = false;
 
 const clearStoredAuthentication = () => {
@@ -19,14 +19,17 @@ const redirectToLogin = () => {
 
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_URL || '/api',
+  withCredentials: true,
 });
+
+const readCookie = (name) => document.cookie.split('; ').find(row => row.startsWith(`${name}=`))?.split('=')[1];
 
 // 请求拦截器：自动为每个请求附加 JWT Token
 api.interceptors.request.use(
   (config) => {
-    const token = localStorage.getItem('token');
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
+    if (!['get', 'head', 'options'].includes((config.method || 'get').toLowerCase())) {
+      const csrfToken = readCookie('csrf_token');
+      if (csrfToken) config.headers['X-CSRF-Token'] = decodeURIComponent(csrfToken);
     }
     return config;
   },
@@ -39,7 +42,7 @@ api.interceptors.request.use(
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (error.response?.status === 401 && localStorage.getItem('token')) {
+    if (error.response?.status === 401) {
       clearStoredAuthentication();
       redirectToLogin();
     }

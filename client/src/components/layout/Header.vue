@@ -195,7 +195,7 @@
 
               <div v-else class="security-placeholder-flow">
                 <div class="security-alert-box">
-                  <p>🔐 Your login token is encrypted with **HMAC-SHA256** and managed securely via session local cookies.</p>
+                  <p>🔐 Your session uses a short-lived HttpOnly cookie with a separate CSRF token; no access token is stored in localStorage.</p>
                 </div>
                 <div class="profile-form-group" style="margin-top: 16px;">
                   <label>Current Credentials State</label>

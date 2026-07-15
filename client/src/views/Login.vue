@@ -66,7 +66,7 @@ const handleLogin = async () => {
 
     const response = await api.post('/auth/login', formData);
     
-    localStorage.setItem('token', response.data.access_token);
+    sessionStorage.setItem('authenticated', 'true');
     localStorage.setItem('role', response.data.role);
     localStorage.setItem('userName', response.data.full_name);
     localStorage.setItem('userId', response.data.user_id);

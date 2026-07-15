@@ -618,7 +618,7 @@
               <select v-model="editMetaStatus" class="format-select-full">
                 <option value="running">🟢 Running (进行中)</option>
                 <option value="paused">🟡 Paused (已暂停)</option>
-                <option value="stopped">🔴 Stopped (已停止)</option>
+                <option value="completed">🔴 Completed (已完成)</option>
                 <option value="archived">⚪ Archived (已归档)</option>
               </select>
             </div>
@@ -726,6 +726,7 @@
 
 <script setup>
 import { ref, onMounted, computed, onUnmounted } from 'vue';
+import MarkdownIt from 'markdown-it';
 import { useRouter, useRoute } from 'vue-router';
 import api from '../services/api';
 import { useToast } from '../composables/useToast';
@@ -757,6 +758,8 @@ const lightboxImageUrl = ref('');
 const lightboxFilename = ref('');
 const lightboxUploader = ref('');
 const lightboxContext = ref('');
+const imageBlobUrls = ref({});
+const markdownRenderer = new MarkdownIt({ html: false, linkify: true, breaks: true });
 
 // Expandable lists states
 const isAttachmentsExpanded = ref(false);
@@ -994,6 +997,9 @@ const fetchAllLogs = async () => {
   try {
     const response = await api.get(`/experiments/${experimentId}/logs`);
     rawLogs.value = response.data;
+    await Promise.all(rawLogs.value.flatMap(log => (log.attachments || [])
+      .filter(file => /\.(png|jpe?g|gif|webp|bmp)$/i.test(file))
+      .map(loadImagePreview)));
     visibleColumnsCount.value = 14;
   } catch (error) {
     toast.error("Failed to sync log stream.");
@@ -1055,7 +1061,7 @@ const formatStatusText = (status) => {
   const map = {
     running: '🟢 Running (进行中)',
     paused: '🟡 Paused (已暂停)',
-    stopped: '🔴 Stopped (已停止)',
+    completed: '🔴 Completed (已完成)',
     archived: '⚪ Archived (已归档)'
   };
   return map[status] || '🟢 Running (运行中)';
@@ -1072,25 +1078,7 @@ const truncateFileName = (name, maxLen = 18) => {
   return base.slice(0, keepLength) + '...' + ext;
 };
 
-const compileMarkdown = (text) => {
-  if (!text) return '<em>No document description recorded.</em>';
-  const lines = text.split('\n');
-  const processedLines = lines.map(line => {
-    const trimmed = line.trim();
-    if (trimmed === '---') return '<hr style="border:0; height:1px; background:var(--border-color); margin:18px 0;">';
-    if (trimmed.startsWith('## ')) return `<h4 style="margin:22px 0 12px 0; font-size:16px; font-weight:700; color:var(--text-main); border-left:3px solid var(--primary-color); padding-left:8px;">${trimmed.replace('## ', '')}</h4>`;
-    if (trimmed.startsWith('### ')) return `<h5 style="margin:16px 0 8px 0; font-size:14px; font-weight:600; color:var(--text-main);">${trimmed.replace('### ', '')}</h5>`;
-    if (trimmed.startsWith('> ') || trimmed.startsWith('💡 ')) return `<blockquote style="background:#fffdf5; border-left:4px solid #d97706; padding:10px 14px; margin:12px 0; font-size:13px; color:#78350f; border-radius:4px;">${trimmed.replace(/^> |^💡 /, '')}</blockquote>`;
-    if (trimmed.startsWith('* ') || trimmed.startsWith('- ')) {
-      let core = trimmed.substring(2);
-      core = core.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>').replace(/\*(.*?)\*/g, '<em>$1</em>');
-      return `<li style="font-size:13.5px; color:#334155; line-height:1.6; margin-bottom:4px; list-style-type: disc; margin-left: 15px;">${core}</li>`;
-    }
-    let inlineText = line.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>').replace(/\*(.*?)\*/g, '<em>$1</em>');
-    return inlineText ? `<p style="font-size:13.5px; line-height:1.6; margin:0 0 6px 0; color:#334155;">${inlineText}</p>` : '';
-  });
-  return processedLines.join('');
-};
+const compileMarkdown = (text) => markdownRenderer.render(text || '_No document description recorded._');
 
 const toggleEditMode = () => {
   isMarkdownMode.value = !isMarkdownMode.value;
@@ -1329,6 +1317,7 @@ onUnmounted(() => {
   if (pdfStreamUrl.value) {
     window.URL.revokeObjectURL(pdfStreamUrl.value);
   }
+  Object.values(imageBlobUrls.value).forEach(URL.revokeObjectURL);
 });
 
 const getAvatarUrl = (node) => `${api.defaults.baseURL}/experiments/attachments/${node}`;
@@ -1451,13 +1440,24 @@ const handleSaveCurrentTask = async () => {
   }
 };
 
-const triggerImageLightbox = (filename, uploader, logContext) => {
-  const token = localStorage.getItem('token') || '';
+const loadImagePreview = async (filename) => {
+  if (imageBlobUrls.value[filename]) return imageBlobUrls.value[filename];
+  const response = await api.get(`/experiments/attachments/${encodeURIComponent(filename)}?preview=true`, { responseType: 'blob' });
+  const url = URL.createObjectURL(response.data);
+  imageBlobUrls.value = { ...imageBlobUrls.value, [filename]: url };
+  return url;
+};
+
+const triggerImageLightbox = async (filename, uploader, logContext) => {
   lightboxFilename.value = filename;
   lightboxUploader.value = uploader;
   lightboxContext.value = logContext;
-  lightboxImageUrl.value = `${api.defaults.baseURL}/experiments/attachments/${filename}?preview=true&token=${token}`;
-  isLightboxOpen.value = true;
+  try {
+    lightboxImageUrl.value = await loadImagePreview(filename);
+    isLightboxOpen.value = true;
+  } catch {
+    toast.error('Unable to load the protected image preview.');
+  }
 };
 
 const closeImageLightbox = () => {
@@ -1473,10 +1473,7 @@ const handleAttachmentClick = (filename, uploader = 'Unknown', logContext = '') 
   const lowercaseName = filename.toLowerCase();
   
   if (lowercaseName.endsWith('.pdf')) {
-    const token = localStorage.getItem('token') || '';
-    const url = `${api.defaults.baseURL}/experiments/attachments/${filename}?preview=true&token=${token}`;
-    window.open(url, '_blank');
-    toast.info(`📖 Opening PDF preview [${truncateFileName(filename, 16)}] in new tab...`);
+    triggerPdfPreview(filename);
   } else if (/\.(png|jpe?g|gif|webp)$/i.test(lowercaseName)) {
     triggerImageLightbox(filename, uploader, logContext);
   } else {
@@ -1485,8 +1482,7 @@ const handleAttachmentClick = (filename, uploader = 'Unknown', logContext = '') 
 };
 
 const getImageStreamUrl = (filename) => {
-  const token = localStorage.getItem('token') || '';
-  return `${api.defaults.baseURL}/experiments/attachments/${filename}?preview=true&token=${token}`;
+  return imageBlobUrls.value[filename] || '';
 };
 
 const closeLogModal = () => { showLogDetailModal.value = false; selectedLog.value = null; isLogEditingFlow.value = false; };
@@ -1800,7 +1796,7 @@ const handleExportPdf = async () => {
 .status-indicator { font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 4px; }
 .status-indicator.running { background: #ecfdf5; color: var(--success-color); }
 .status-indicator.paused { background: #fffbeb; color: #d97706; }
-.status-indicator.stopped { background: #fef2f2; color: #ef4444; }
+.status-indicator.completed { background: #fef2f2; color: #ef4444; }
 .status-indicator.archived { background: #f1f5f9; color: #64748b; }
 
 .meta-tags { display: flex; gap: 6px; }

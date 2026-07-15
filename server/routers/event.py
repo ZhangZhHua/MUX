@@ -1,22 +1,36 @@
-import os
 import json
 from datetime import datetime, timedelta, date
 from fastapi import APIRouter, Depends, HTTPException, status, File, UploadFile, Query
-from sqlalchemy.orm import Session
+from fastapi.responses import FileResponse
+from sqlalchemy.orm import Session, selectinload
 from typing import List, Optional
 from config.database import get_db
 from models.event import LabEvent, EventComment, EventTag
 from models.experiment import Experiment
+from models.daily_log import Attachment
 from models.user import User, Group
 from schemas.event import EventCreate, EventResponse, EventCommentCreate, EventCommentResponse, EventTagResponse
 from routers.auth import get_current_user
 from routers.experiment import log_telemetry_activity
+from routers.authorization import require_group_member
+from utils.uploads import resolve_attachment_path, save_verified_upload
 
 router = APIRouter(prefix="/events", tags=["Events"])
 
-UPLOAD_DIR = "uploads"
-if not os.path.exists(UPLOAD_DIR):
-    os.makedirs(UPLOAD_DIR)
+def claim_event_attachments(db: Session, attachments, user: User, group_id: int) -> None:
+    names = {item.get("name") for item in (attachments or []) if isinstance(item, dict) and not item.get("is_referenced")}
+    names.discard(None)
+    if not names:
+        return
+    records = db.query(Attachment).filter(Attachment.storage_name.in_(names)).all()
+    if len(records) != len(names):
+        raise HTTPException(status_code=400, detail="One or more event attachments do not exist.")
+    for attachment in records:
+        if attachment.owner_id != user.id and user.role != "sys_admin":
+            raise HTTPException(status_code=403, detail="You may only attach files you uploaded.")
+        if attachment.group_id not in (None, group_id):
+            raise HTTPException(status_code=409, detail="Attachment belongs to another group.")
+        attachment.group_id = group_id
 
 def get_occurrences_for_event(event: LabEvent, view_start: date, view_end: date) -> List[date]:
     start_date_val = event.start_date.date()
@@ -92,6 +106,8 @@ def get_events(
     start_date: str = Query(..., description="Start date of the range in YYYY-MM-DD format"),
     end_date: Optional[str] = Query(None, description="End date of the range in YYYY-MM-DD format"),
     group_id: Optional[int] = Query(None, description="Filter events by group. 0 = all user groups, omit for all accessible"),
+    offset: int = Query(0, ge=0),
+    limit: int = Query(100, ge=1, le=200),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -129,7 +145,11 @@ def get_events(
         if group_id is not None and group_id > 0:
             query = query.filter(LabEvent.group_id == group_id)
     
-    all_events = query.all()
+    all_events = query.options(
+        selectinload(LabEvent.tags),
+        selectinload(LabEvent.participants),
+        selectinload(LabEvent.experiment),
+    ).order_by(LabEvent.start_date.asc()).offset(offset).limit(limit).all()
     
     expanded_events = []
     
@@ -186,6 +206,10 @@ def create_event(
     group = db.query(Group).filter(Group.id == event_in.group_id).first()
     if not group:
         raise HTTPException(status_code=404, detail="Research group not found.")
+    if event_in.experiment_id is not None:
+        experiment = db.query(Experiment).filter(Experiment.id == event_in.experiment_id, Experiment.group_id == event_in.group_id).first()
+        if not experiment:
+            raise HTTPException(status_code=400, detail="The linked experiment must belong to the event group.")
     
     # Resolve tags
     db_tags = []
@@ -223,6 +247,8 @@ def create_event(
     
     db_event.attachments = event_in.attachments
     db.add(db_event)
+    db.flush()
+    claim_event_attachments(db, event_in.attachments, current_user, event_in.group_id)
     db.commit()
     db.refresh(db_event)
     
@@ -345,6 +371,7 @@ def update_event(
         db_event.end_date = event_in.end_date
         db_event.is_important = event_in.is_important
         db_event.attachments = event_in.attachments
+        claim_event_attachments(db, event_in.attachments, current_user, event_in.group_id)
         db_event.recurrence_rule = event_in.recurrence_rule
         db_event.recurrence_end_date = event_in.recurrence_end_date
         db_event.tags = db_tags
@@ -486,93 +513,37 @@ def get_comments(
 
 # 7. Local File Upload for Event attachments
 @router.post("/upload")
-def upload_event_file(
+async def upload_event_file(
     file: UploadFile = File(...),
+    db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    try:
-        # Check size limit: 50MB
-        file.file.seek(0, 2)
-        file_size = file.file.tell()
-        file.file.seek(0)
-        
-        if file_size > 50 * 1024 * 1024:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Attachment size exceeds the maximum limit of 50MB"
-            )
+    storage_name, original_name, media_type, size_bytes, digest = await save_verified_upload(file)
+    db.add(Attachment(storage_name=storage_name, original_name=original_name, media_type=media_type, size_bytes=size_bytes, sha256=digest, owner_id=current_user.id))
+    db.commit()
+    return {"filename": storage_name, "original_name": original_name, "url": f"/experiments/attachments/{storage_name}"}
 
-        file_path = os.path.join(UPLOAD_DIR, file.filename)
-        with open(file_path, "wb") as f:
-            f.write(file.file.read())
-        return {"filename": file.filename, "url": f"/experiments/attachments/{file.filename}"}
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"File write error on lab server: {str(e)}")
-
-
-# 8. Local file download/preview wrapper specifically for event files
-from fastapi import Request
-from fastapi.responses import FileResponse
-from utils.security import decode_access_token
-
-def get_current_user_from_header_or_query(
-    request: Request,
-    token: str = None,
-    db: Session = Depends(get_db)
-) -> Optional[User]:
-    actual_token = token
-    if not actual_token:
-        auth_header = request.headers.get("Authorization")
-        if auth_header and auth_header.startswith("Bearer "):
-            actual_token = auth_header.split(" ")[1]
-            
-    if not actual_token:
-        return None
-        
-    try:
-        payload = decode_access_token(actual_token)
-        if payload is None:
-            return None
-        email: str = payload.get("sub")
-        if email is None:
-            return None
-        user = db.query(User).filter(User.email == email).first()
-        return user
-    except Exception:
-        return None
 
 @router.get("/attachments/{filename}")
 def download_event_file(
     filename: str,
-    request: Request,
     preview: bool = False,
-    token: Optional[str] = None,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
 ):
-    current_user = get_current_user_from_header_or_query(request, token, db)
-    if not current_user:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Authentication token is missing or invalid. Access denied."
-        )
-        
-    file_path = os.path.join(UPLOAD_DIR, filename)
-    if not os.path.exists(file_path):
-        raise HTTPException(status_code=404, detail="File not found")
-        
+    attachment = db.query(Attachment).filter(Attachment.storage_name == filename).first()
+    if not attachment:
+        raise HTTPException(status_code=404, detail="Attachment not found")
+    if attachment.group_id is None:
+        if attachment.owner_id != current_user.id and current_user.role != "sys_admin":
+            raise HTTPException(status_code=403, detail="Permission denied.")
+    else:
+        require_group_member(db, current_user, attachment.group_id)
+    file_path = resolve_attachment_path(filename)
     if preview:
-        import mimetypes
-        media_type, _ = mimetypes.guess_type(file_path)
-        if not media_type:
-            if filename.lower().endswith('.pdf'):
-                media_type = "application/pdf"
-            else:
-                media_type = "application/octet-stream"
         return FileResponse(
             file_path,
-            media_type=media_type,
+            media_type=attachment.media_type,
             headers={"Content-Disposition": "inline"}
         )
-    return FileResponse(file_path, filename=filename)
+    return FileResponse(file_path, filename=attachment.original_name, media_type=attachment.media_type)

@@ -4,11 +4,11 @@ from sqlalchemy.orm import sessionmaker
 
 import os
 
-# 数据库连接字符串，优先从环境变量读取（容器化部署需要），开发环境回退到 localhost
-SQLALCHEMY_DATABASE_URL = os.getenv(
-    "DATABASE_URL", 
-    "postgresql://lab_user:lab_password_2026@localhost:5432/lab_logs"
-)
+# Production must be explicitly configured; only local development may use a
+# convenience connection string.
+if os.getenv("ENVIRONMENT") == "production" and not os.getenv("DATABASE_URL"):
+    raise RuntimeError("DATABASE_URL is required in production")
+SQLALCHEMY_DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://localhost:5432/lab_logs")
 
 # 创建数据库引擎
 engine = create_engine(SQLALCHEMY_DATABASE_URL)
